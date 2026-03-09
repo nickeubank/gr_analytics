@@ -12,7 +12,7 @@ pip install -e .
 
 ```python
 import pandas as pd
-from gr_analytics import score_event, score_my_team
+from gr_analytics import score_event, score_my_team, optimal_lineup
 
 # Load your race scenario
 scenario = pd.read_csv("my_race.csv")
@@ -30,6 +30,18 @@ points, salary_change = score_my_team(
     team="MER",
     star_driver="BEA",
     round=1,
+)
+
+# Find the optimal lineup (maximise points, £100M budget)
+lineup = optimal_lineup(result)
+
+# With locked-in drivers (already under contract, cost nothing)
+# and a budget for the remaining open spots
+lineup = optimal_lineup(
+    result,
+    locked_in=["HAM", "LEC"],   # driver_abbr or team code
+    optimize_for="points",       # or "salary_change"
+    budget=60.0,                 # £M available for non-locked picks
 )
 ```
 
@@ -98,6 +110,25 @@ Bundled driver data (`gr_analytics/data/driver_data.csv`) contains starting sala
 
 - `round=0` — pre-season (before Australia 2026)
 - `round=1` — post-Australia 2026
+
+## Lineup Optimisation
+
+`optimal_lineup` uses mixed-integer linear programming (via `scipy.optimize.milp`) to find the best 5-driver + 1-constructor lineup within a salary budget.
+
+```python
+lineup = optimal_lineup(
+    scored,                  # DataFrame from score_event()
+    locked_in=None,          # list of driver_abbr / team codes already on your team
+    optimize_for="points",   # "points" or "salary_change"
+    budget=100.0,            # £M for non-locked picks
+)
+```
+
+- **`locked_in`** picks are included free (already under contract) and don't count against the budget.
+- **`optimize_for="points"`** selects the optimal star driver (who earns double points) across all candidates.
+- **`optimize_for="salary_change"`** maximises total salary gain for the next race's team valuation.
+
+The returned DataFrame has a `star` column (`1` = starred driver, points mode only).
 
 ## Running Tests
 
