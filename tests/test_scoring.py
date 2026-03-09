@@ -5,9 +5,13 @@ Run with:  pytest tests/test_scoring.py -v
        or:  python tests/test_scoring.py
 """
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
-from gr_analytics import _score_drivers, _score_constructors
+from gr_analytics import _score_drivers, _score_constructors, score_event
+
+_TESTS_DIR = Path(__file__).parent
 
 
 def _score_full(df: pd.DataFrame) -> pd.DataFrame:
@@ -256,6 +260,46 @@ class TestEdgeCases:
         """Russell went backwards (P3 qual -> P6 finish): no negative overtake pts."""
         result = _score_full(basic_race)
         assert result.loc[result.driver_name == "Russell", "pts_overtake"].iloc[0] == 0
+
+
+# ---------------------------------------------------------------------------
+# Australia 2026 round-0 integration test
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def australia_result():
+    scenario = pd.read_csv(_TESTS_DIR / "test_australia.csv")
+    return score_event(scenario, round=0)
+
+
+def _get_row(result, abbr):
+    """Look up a row by driver_abbr (drivers) or driver_name (teams)."""
+    driver_row = result[result["driver_abbr"] == abbr]
+    if not driver_row.empty:
+        return driver_row.iloc[0]
+    team_row = result[(result["type"] == "team") & (result["driver_name"] == abbr)]
+    return team_row.iloc[0]
+
+
+@pytest.mark.parametrize("abbr,exp_pts,exp_salary,exp_change", [
+    ("RUS", 164, 29.6, 0.9),
+    ("HAM", 156, 22.1, 1.2),
+    ("ANT", 161, 25.9, 1.1),
+    ("BEA", 172, 11.2, 2.0),
+    ("COL", 108,  6.7, 2.0),
+    ("FER", 161, 23.7, 1.2),
+    ("MER", 177, 28.8, 0.3),
+    ("HAS", 125,  8.0, 3.0),
+])
+class TestAustraliaRound0:
+    def test_points_earned(self, australia_result, abbr, exp_pts, exp_salary, exp_change):
+        assert _get_row(australia_result, abbr)["points_earned"] == exp_pts
+
+    def test_salary_after_event(self, australia_result, abbr, exp_pts, exp_salary, exp_change):
+        assert _get_row(australia_result, abbr)["salary_after_event"] == exp_salary
+
+    def test_salary_change(self, australia_result, abbr, exp_pts, exp_salary, exp_change):
+        assert _get_row(australia_result, abbr)["salary_change"] == exp_change
 
 
 # ---------------------------------------------------------------------------
