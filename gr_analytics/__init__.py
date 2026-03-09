@@ -172,18 +172,26 @@ def _score_drivers(drivers: pd.DataFrame) -> pd.DataFrame:
         is_dns = df["completed_pct"] == "DNS"
 
     df["_race_pts"] = df["finishing_position"].map(DRIVER_RACE_POINTS)
-    df["_overtake_pts"] = (df["qualifying_position"] - df["finishing_position"]).clip(lower=0) * 3
+    df["_overtake_pts"] = (df["qualifying_position"] - df["finishing_position"]).clip(
+        lower=0
+    ) * 3
     df["_improvement_pts"] = (
         df["eight_race_average"] - df["finishing_position"]
     ).apply(_improvement_pts)
     # Completion bonus: 3 pts each at 25%, 50%, 75%, 90% of race distance
     if "completed_pct" in df.columns:
+
         def _completion_pts(pct):
-            if pct >= 0.90: return 12
-            if pct >= 0.75: return 9
-            if pct >= 0.50: return 6
-            if pct >= 0.25: return 3
+            if pct >= 0.90:
+                return 12
+            if pct >= 0.75:
+                return 9
+            if pct >= 0.50:
+                return 6
+            if pct >= 0.25:
+                return 3
             return 0
+
         pct_numeric = pd.to_numeric(df["completed_pct"], errors="coerce").fillna(0)
         df["_completion_pts"] = pct_numeric.apply(_completion_pts)
     else:
@@ -207,7 +215,13 @@ def _score_drivers(drivers: pd.DataFrame) -> pd.DataFrame:
             df.at[i1, "_teammate_pts"] = pts
 
     # DNS drivers get 0 for all race-related points
-    race_cols = ["_race_pts", "_overtake_pts", "_improvement_pts", "_completion_pts", "_teammate_pts"]
+    race_cols = [
+        "_race_pts",
+        "_overtake_pts",
+        "_improvement_pts",
+        "_completion_pts",
+        "_teammate_pts",
+    ]
     df.loc[is_dns, race_cols] = 0
 
     point_cols = [
@@ -336,10 +350,14 @@ def _validate_scenario(scenario: pd.DataFrame) -> None:
             parts.append(f"missing from sequence: {missing}")
         if extra:
             parts.append(f"unexpected values: {extra}")
-        errors.append("Qualifying positions are not sequential and unique — " + "; ".join(parts))
+        errors.append(
+            "Qualifying positions are not sequential and unique — " + "; ".join(parts)
+        )
 
     # Race: all positions required, must be exactly 1..n
-    race_col = "race_position" if "race_position" in scenario.columns else "finishing_position"
+    race_col = (
+        "race_position" if "race_position" in scenario.columns else "finishing_position"
+    )
     race = scenario[race_col]
     if race.isna().any():
         missing_idx = scenario.index[race.isna()].tolist()
@@ -358,7 +376,9 @@ def _validate_scenario(scenario: pd.DataFrame) -> None:
                 parts.append(f"missing from sequence: {missing}")
             if extra:
                 parts.append(f"unexpected values: {extra}")
-            errors.append("Race positions are not sequential and unique — " + "; ".join(parts))
+            errors.append(
+                "Race positions are not sequential and unique — " + "; ".join(parts)
+            )
 
     if errors:
         raise ValueError("Invalid scenario:\n" + "\n".join(f"  - {e}" for e in errors))
@@ -385,8 +405,10 @@ def score_event(scenario: pd.DataFrame, round: int = None) -> pd.DataFrame:
     -------
     DataFrame with scoring columns appended.
     Drivers get: pts_qualifying, pts_race, pts_overtake, pts_improvement,
-                 pts_completion, pts_teammate, points_earned, salary_after_event
-    Constructors get: pts_qualifying, pts_race, points_earned, salary_after_event
+                 pts_completion, pts_teammate, points_earned, salary_after_event,
+                 salary_change
+    Constructors get: pts_qualifying, pts_race, points_earned, salary_after_event,
+                salary_change
     """
     _validate_scenario(scenario)
 
@@ -585,7 +607,9 @@ def optimal_lineup(
             full.loc[full["driver_abbr"] == star_abbr, "star"] = 1
             # total = doubled star pts + rest
             star_pts = free.at[i, obj_col]
-            total = -result.fun + locked[obj_col].sum() + star_pts  # star_pts counted twice via obj_copy
+            total = (
+                -result.fun + locked[obj_col].sum() + star_pts
+            )  # star_pts counted twice via obj_copy
         else:
             # Star is the highest-points locked_in driver
             locked_drivers = locked[locked["type"] == "driver"]
