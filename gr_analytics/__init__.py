@@ -22,7 +22,9 @@ Assumptions:
 import math
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+from scipy.optimize import Bounds, LinearConstraint, milp
 
 _DATA_DIR = Path(__file__).parent / "data"
 
@@ -461,3 +463,142 @@ def score_my_team(
     print(f"total salary change: {total_salary_change:.1f}")
 
     return total_points, total_salary_change
+
+
+def optimal_lineup(
+    scored: pd.DataFrame,
+    locked_in: list = None,
+    optimize_for: str = "points",
+    budget: float = 100.0,
+) -> pd.DataFrame:
+    """
+    Find the optimal 5-driver + 1-constructor lineup.
+
+    Parameters
+    ----------
+    scored : DataFrame
+        Output of score_event().
+    locked_in : list of str, optional
+        driver_abbr values (drivers) or driver_name team codes (e.g. "MER")
+        that must appear in the lineup. These count against the budget and
+        the 5-driver / 1-constructor slot limits.
+    optimize_for : {"points", "salary_change"}
+        Objective to maximise. For "points", the star driver (who earns
+        double points) is chosen optimally across all candidates. For
+        "salary_change", the lineup maximises total salary change; no star
+        is designated since the star does not affect salary in GR.
+    budget : float
+        Salary budget in £M available for non-locked-in picks (default 100).
+        Locked-in drivers are treated as free (already under contract).
+
+    Returns
+    -------
+    DataFrame with the 6 selected rows plus a `star` column (1 = starred
+    driver, only set when optimize_for="points").
+    """
+    if locked_in is None:
+        locked_in = []
+    if optimize_for not in ("points", "salary_change"):
+        raise ValueError("optimize_for must be 'points' or 'salary_change'")
+
+    obj_col = "points_earned" if optimize_for == "points" else "salary_change"
+
+    df = scored.copy()
+    df["_locked"] = df["driver_abbr"].isin(locked_in) | (
+        (df["type"] == "team") & df["driver_name"].isin(locked_in)
+    )
+
+    locked = df[df["_locked"]].copy()
+    free = df[~df["_locked"]].copy()
+
+    n_locked_drivers = (locked["type"] == "driver").sum()
+    n_locked_teams = (locked["type"] == "team").sum()
+    drivers_needed = 5 - n_locked_drivers
+    teams_needed = 1 - n_locked_teams
+
+    remaining_budget = budget
+
+    # Restrict free pool to only the slot types still needed
+    if teams_needed == 0:
+        free = free[free["type"] != "team"]
+    if drivers_needed == 0:
+        free = free[free["type"] != "driver"]
+
+    # Drivers first, teams last (stable ordering for constraint indexing)
+    free = free.sort_values("type").reset_index(drop=True)
+
+    salaries_arr = free["starting_salary"].values.astype(float)
+    obj_arr = free[obj_col].values.astype(float)
+
+    bounds = Bounds(0, 1)
+    integrality = np.ones(len(free))
+    constraints = [LinearConstraint(A=salaries_arr, lb=0, ub=remaining_budget)]
+
+    if drivers_needed > 0:
+        driver_mask = (free["type"] == "driver").values.astype(float)
+        constraints.append(
+            LinearConstraint(A=driver_mask, lb=drivers_needed, ub=drivers_needed)
+        )
+
+    if teams_needed == 1:
+        team_mask = (free["type"] == "team").values.astype(float)
+        constraints.append(LinearConstraint(A=team_mask, lb=1, ub=1))
+
+    def _run_milp(objective):
+        result = milp(
+            c=-objective,
+            constraints=constraints,
+            integrality=integrality,
+            bounds=bounds,
+        )
+        if not result.success:
+            raise RuntimeError(f"Optimization failed: {result.message}")
+        return result
+
+    if optimize_for == "salary_change":
+        result = _run_milp(obj_arr)
+        picked = free[result.x.astype(bool)].copy()
+        full = pd.concat([picked, locked], ignore_index=True)
+        full["star"] = 0
+        return full.drop(columns=["_locked"])
+
+    # --- points optimization: loop over star candidates ---
+    free_driver_idx = free[free["type"] == "driver"].index.tolist()
+    # -1 sentinel: best star comes from locked_in set
+    star_candidates = free_driver_idx + [-1]
+
+    best_total = -np.inf
+    best_full = None
+
+    for i in star_candidates:
+        obj_copy = obj_arr.copy()
+        if i != -1:
+            obj_copy[i] *= 2
+
+        result = _run_milp(obj_copy)
+        picked = free[result.x.astype(bool)].copy()
+        full = pd.concat([picked, locked], ignore_index=True)
+        full["star"] = 0
+
+        if i != -1:
+            star_abbr = free.at[i, "driver_abbr"]
+            full.loc[full["driver_abbr"] == star_abbr, "star"] = 1
+            # total = doubled star pts + rest
+            star_pts = free.at[i, obj_col]
+            total = -result.fun + locked[obj_col].sum() + star_pts  # star_pts counted twice via obj_copy
+        else:
+            # Star is the highest-points locked_in driver
+            locked_drivers = locked[locked["type"] == "driver"]
+            if locked_drivers.empty:
+                total = -result.fun + locked[obj_col].sum()
+            else:
+                best_row = locked_drivers.loc[locked_drivers[obj_col].idxmax()]
+                star_abbr = best_row["driver_abbr"]
+                full.loc[full["driver_abbr"] == star_abbr, "star"] = 1
+                total = -result.fun + locked[obj_col].sum() + best_row[obj_col]
+
+        if total > best_total:
+            best_total = total
+            best_full = full
+
+    return best_full.drop(columns=["_locked"])
