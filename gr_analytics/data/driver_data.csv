@@ -1,0 +1,67 @@
+﻿type,driver_abbr,driver_name,driver_team,round,starting_salary,eight_race_average
+driver,VER,M. Verstappen,RBR,0,30,1
+driver,RUS,G. Russell,MER,0,28.7,2
+driver,NOR,L. Norris,MCL,0,27.4,3
+driver,PIA,O. Piastri,MCL,0,26.1,4
+driver,ANT,K. Antonelli,MER,0,24.8,5
+driver,LEC,C. Leclerc,FER,0,23.5,6
+driver,ALO,F. Alonso,AMR,0,22.2,7
+driver,HAM,L. Hamilton,FER,0,20.9,8
+driver,HAD,I. Hadjar,RBR,0,19.6,9
+driver,GAS,P. Gasly,ALP,0,18.3,10
+driver,STR,L. Stroll,AMR,0,17,11
+driver,SAI,C. Sainz Jr,WIL,0,15.7,12
+driver,LAW,L. Lawson,RBS,0,14.4,13
+driver,ALB,A. Albon,WIL,0,13.1,14
+driver,HUL,N. Hulkenberg,AUD,0,11.8,15
+driver,BOR,G. Bortoleto,AUD,0,10.5,16
+driver,BEA,O. Bearman,HAS,0,9.2,17
+driver,OCO,E. Ocon,HAS,0,7.9,18
+driver,BOT,V. Bottas,CAD,0,4.7,19
+driver,PER,S. Perez,CAD,0,4.7,20
+driver,COL,F. Colapinto,ALP,0,4.7,21
+driver,LIN,A. Lindblad,RBS,0,4.6,22
+team,MER,MER,,0,28.5,1
+team,MCL,MCL,,0,28.5,2
+team,RBR,RBR,,0,25,3
+team,FER,FER,,0,22.5,4
+team,AMR,AMR,,0,20,5
+team,WIL,WIL,,0,17.5,6
+team,RBS,RBS,,0,15,7
+team,ALP,ALP,,0,12.5,8
+team,AUD,AUD,,0,10,9
+team,CAD,CAD,,0,7.5,10
+team,HAS,HAS,,0,5,11
+driver,VER,M. Verstappen,RBR,1,28.2,2
+driver,RUS,G. Russell,MER,1,29.6,2
+driver,NOR,L. Norris,MCL,1,26.7,4
+driver,PIA,O. Piastri,MCL,1,24.1,7
+driver,ANT,K. Antonelli,MER,1,25.9,5
+driver,LEC,C. Leclerc,FER,1,24.5,6
+driver,ALO,F. Alonso,AMR,1,20.2,9
+driver,HAM,L. Hamilton,FER,1,22.1,8
+driver,HAD,I. Hadjar,RBR,1,17.6,11
+driver,GAS,P. Gasly,ALP,1,18.3,10
+driver,STR,L. Stroll,AMR,1,15,12
+driver,SAI,C. Sainz Jr,WIL,1,13.9,13
+driver,LAW,L. Lawson,RBS,1,14.5,13
+driver,ALB,A. Albon,WIL,1,13.9,14
+driver,HUL,N. Hulkenberg,AUD,1,9.8,16
+driver,BOR,G. Bortoleto,AUD,1,12.5,6
+driver,BEA,O. Bearman,HAS,1,11.2,16
+driver,OCO,E. Ocon,HAS,1,9.9,18
+driver,BOT,V. Bottas,CAD,1,4.5,19
+driver,PER,S. Perez,CAD,1,6.4,19
+driver,COL,F. Colapinto,ALP,1,6.7,19
+driver,LIN,A. Lindblad,RBS,1,6.6,18
+team,MER,MER,,1,28.8,
+team,MCL,MCL,,1,25.7,
+team,RBR,RBR,,1,22.4,
+team,FER,FER,,1,23.7,
+team,AMR,AMR,,1,17,
+team,WIL,WIL,,1,16.1,
+team,RBS,RBS,,1,17.4,
+team,ALP,ALP,,1,14.2,
+team,AUD,AUD,,1,9.8,
+team,CAD,CAD,,1,7.3,
+team,HAS,HAS,,1,8,
