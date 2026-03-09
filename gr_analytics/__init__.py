@@ -31,6 +31,7 @@ def driver_data() -> pd.DataFrame:
     """Load and return driver_data.csv as a DataFrame."""
     return pd.read_csv(_DATA_DIR / "driver_data.csv")
 
+
 # ---------------------------------------------------------------------------
 # Lookup tables — Drivers
 # ---------------------------------------------------------------------------
@@ -141,7 +142,7 @@ def _calc_adjustment(variation: float, max_adjustment: float) -> float:
     """
     raw = variation / 4
     sign = 1 if raw >= 0 else -1
-    truncated = sign * math.floor(abs(raw) / SALARY_STEP) * SALARY_STEP
+    truncated = sign * math.floor(round(abs(raw) / SALARY_STEP, 8)) * SALARY_STEP
     truncated = round(truncated, 1)  # avoid float precision drift
 
     truncated = max(-max_adjustment, min(max_adjustment, truncated))
@@ -164,16 +165,33 @@ def _score_drivers(drivers: pd.DataFrame) -> pd.DataFrame:
     """Score all driver rows. Input must contain only type='driver' rows."""
     df = drivers.copy()
 
-    df["_qual_pts"] = df["qualifying_position"].map(DRIVER_QUAL_POINTS)
+    # DNQ drivers (completed_qualifying=0) get 0 qual pts but overtakes use their qualifying_position
+    qual_pts = df["qualifying_position"].map(DRIVER_QUAL_POINTS)
+    if "completed_qualifying" in df.columns:
+        qual_pts = qual_pts.where(df["completed_qualifying"] == 1, other=0)
+    df["_qual_pts"] = qual_pts
+    # DNS drivers (completed_pct="DNS") get 0 for all race-related points
+    is_dns = pd.Series(False, index=df.index)
+    if "completed_pct" in df.columns:
+        is_dns = df["completed_pct"] == "DNS"
+
     df["_race_pts"] = df["finishing_position"].map(DRIVER_RACE_POINTS)
-    df["_overtake_pts"] = (df["qualifying_position"] - df["finishing_position"]).clip(
-        lower=0
-    ) * 3
+    df["_overtake_pts"] = (df["qualifying_position"] - df["finishing_position"]).clip(lower=0) * 3
     df["_improvement_pts"] = (
         df["eight_race_average"] - df["finishing_position"]
     ).apply(_improvement_pts)
-    # All drivers finish -> all 4 completion milestones hit (4 x 3 = 12)
-    df["_completion_pts"] = 12
+    # Completion bonus: 3 pts each at 25%, 50%, 75%, 90% of race distance
+    if "completed_pct" in df.columns:
+        def _completion_pts(pct):
+            if pct >= 0.90: return 12
+            if pct >= 0.75: return 9
+            if pct >= 0.50: return 6
+            if pct >= 0.25: return 3
+            return 0
+        pct_numeric = pd.to_numeric(df["completed_pct"], errors="coerce").fillna(0)
+        df["_completion_pts"] = pct_numeric.apply(_completion_pts)
+    else:
+        df["_completion_pts"] = 12
 
     # Teammate beating points
     df["_teammate_pts"] = 0
@@ -191,6 +209,10 @@ def _score_drivers(drivers: pd.DataFrame) -> pd.DataFrame:
             df.at[i0, "_teammate_pts"] = pts
         elif p1 < p0:
             df.at[i1, "_teammate_pts"] = pts
+
+    # DNS drivers get 0 for all race-related points
+    race_cols = ["_race_pts", "_overtake_pts", "_improvement_pts", "_completion_pts", "_teammate_pts"]
+    df.loc[is_dns, race_cols] = 0
 
     point_cols = [
         "_qual_pts",
@@ -298,6 +320,54 @@ def _score_constructors(
 # ---------------------------------------------------------------------------
 
 
+def _validate_scenario(scenario: pd.DataFrame) -> None:
+    """Check that qualifying and race positions are sequential and unique."""
+    errors = []
+    n = len(scenario)
+
+    # Qualifying: all positions required, must be exactly 1..n
+    qual = scenario["qualifying_position"]
+    qual_vals = sorted(qual.astype(int).tolist())
+    expected_qual = list(range(1, n + 1))
+    if qual_vals != expected_qual:
+        dupes = sorted({v for v in qual_vals if qual_vals.count(v) > 1})
+        missing = sorted(set(expected_qual) - set(qual_vals))
+        extra = sorted(set(qual_vals) - set(expected_qual))
+        parts = []
+        if dupes:
+            parts.append(f"duplicates: {dupes}")
+        if missing:
+            parts.append(f"missing from sequence: {missing}")
+        if extra:
+            parts.append(f"unexpected values: {extra}")
+        errors.append("Qualifying positions are not sequential and unique — " + "; ".join(parts))
+
+    # Race: all positions required, must be exactly 1..n
+    race_col = "race_position" if "race_position" in scenario.columns else "finishing_position"
+    race = scenario[race_col]
+    if race.isna().any():
+        missing_idx = scenario.index[race.isna()].tolist()
+        errors.append(f"Missing race positions for rows: {missing_idx}")
+    else:
+        race_vals = sorted(race.astype(int).tolist())
+        expected_race = list(range(1, n + 1))
+        if race_vals != expected_race:
+            dupes = sorted({v for v in race_vals if race_vals.count(v) > 1})
+            missing = sorted(set(expected_race) - set(race_vals))
+            extra = sorted(set(race_vals) - set(expected_race))
+            parts = []
+            if dupes:
+                parts.append(f"duplicates: {dupes}")
+            if missing:
+                parts.append(f"missing from sequence: {missing}")
+            if extra:
+                parts.append(f"unexpected values: {extra}")
+            errors.append("Race positions are not sequential and unique — " + "; ".join(parts))
+
+    if errors:
+        raise ValueError("Invalid scenario:\n" + "\n".join(f"  - {e}" for e in errors))
+
+
 def score_event(scenario: pd.DataFrame, round: int = None) -> pd.DataFrame:
     """
     Score a Grand Prix event for drivers and constructors.
@@ -306,7 +376,12 @@ def score_event(scenario: pd.DataFrame, round: int = None) -> pd.DataFrame:
     ----------
     scenario : DataFrame with columns:
         driver_abbr, qualifying_position, race_position
-        (any additional columns are passed through)
+        completed_qualifying: 1 if driver completed qualifying, 0 if DNQ.
+            DNQ drivers get 0 qualifying points but overtake points still
+            use their official qualifying_position.
+        completed_pct (optional): fraction of race completed (0.0-1.0).
+            Used to calculate completion bonus (3 pts each at 25/50/75/90%).
+            Defaults to 1.0 (full completion) if column is absent.
     round : int, optional
         Race round number. Defaults to the maximum round in driver_data.
 
@@ -317,6 +392,8 @@ def score_event(scenario: pd.DataFrame, round: int = None) -> pd.DataFrame:
                  pts_completion, pts_teammate, points_earned, salary_after_event
     Constructors get: pts_qualifying, pts_race, points_earned, salary_after_event
     """
+    _validate_scenario(scenario)
+
     dd = driver_data()
     if round is None:
         round = dd["round"].max()
@@ -327,8 +404,7 @@ def score_event(scenario: pd.DataFrame, round: int = None) -> pd.DataFrame:
 
     drivers_merged = drivers_dd.merge(
         scenario,
-        left_on="abbreviations",
-        right_on="driver_abbr",
+        on="driver_abbr",
         how="left",
     ).rename(columns={"race_position": "finishing_position"})
 

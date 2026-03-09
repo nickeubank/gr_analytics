@@ -9,7 +9,8 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-from gr_analytics import _score_drivers, _score_constructors, score_event
+
+from gr_analytics import _score_constructors, _score_drivers, score_event
 
 _TESTS_DIR = Path(__file__).parent
 
@@ -27,6 +28,7 @@ def _score_full(df: pd.DataFrame) -> pd.DataFrame:
 # Shared fixture: 2 teams x 2 drivers + 2 constructors
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def basic_race():
     """
@@ -35,20 +37,30 @@ def basic_race():
     Team Mercedes: Hamilton (P5 -> P2), Russell (P3 -> P6)
     Team RedBull:  Verstappen (P1 -> P1), Perez (P4 -> P4)
     """
-    return pd.DataFrame({
-        "type":               ["driver",    "driver",  "driver",    "driver",  "team",     "team"],
-        "driver_name":        ["Hamilton",  "Russell", "Verstappen","Perez",   "Mercedes", "RedBull"],
-        "driver_team":        ["Mercedes",  "Mercedes","RedBull",   "RedBull", "",         ""],
-        "eight_race_average": [4.0,          5.5,       1.5,         4.5,      1.0,        3.0],
-        "starting_salary":    [26.0,         24.4,      34.0,        22.8,     28.0,       25.0],
-        "qualifying_position":[5,            3,         1,           4,        None,       None],
-        "finishing_position": [2,            6,         1,           4,        None,       None],
-    })
+    return pd.DataFrame(
+        {
+            "type": ["driver", "driver", "driver", "driver", "team", "team"],
+            "driver_name": [
+                "Hamilton",
+                "Russell",
+                "Verstappen",
+                "Perez",
+                "Mercedes",
+                "RedBull",
+            ],
+            "driver_team": ["Mercedes", "Mercedes", "RedBull", "RedBull", "", ""],
+            "eight_race_average": [4.0, 5.5, 1.5, 4.5, 1.0, 3.0],
+            "starting_salary": [26.0, 24.4, 34.0, 22.8, 28.0, 25.0],
+            "qualifying_position": [5, 3, 1, 4, None, None],
+            "finishing_position": [2, 6, 1, 4, None, None],
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Driver points tests (hand-calculated)
 # ---------------------------------------------------------------------------
+
 
 class TestDriverPoints:
     """
@@ -75,15 +87,22 @@ class TestDriverPoints:
 
     def test_hamilton_points(self, basic_race):
         result = _score_full(basic_race)
-        assert result.loc[result.driver_name == "Hamilton", "points_earned"].iloc[0] == 167
+        assert (
+            result.loc[result.driver_name == "Hamilton", "points_earned"].iloc[0] == 167
+        )
 
     def test_russell_points(self, basic_race):
         result = _score_full(basic_race)
-        assert result.loc[result.driver_name == "Russell", "points_earned"].iloc[0] == 143
+        assert (
+            result.loc[result.driver_name == "Russell", "points_earned"].iloc[0] == 143
+        )
 
     def test_verstappen_points(self, basic_race):
         result = _score_full(basic_race)
-        assert result.loc[result.driver_name == "Verstappen", "points_earned"].iloc[0] == 164
+        assert (
+            result.loc[result.driver_name == "Verstappen", "points_earned"].iloc[0]
+            == 164
+        )
 
     def test_perez_points(self, basic_race):
         result = _score_full(basic_race)
@@ -93,6 +112,7 @@ class TestDriverPoints:
 # ---------------------------------------------------------------------------
 # Constructor points tests (hand-calculated)
 # ---------------------------------------------------------------------------
+
 
 class TestConstructorPoints:
     """
@@ -113,15 +133,21 @@ class TestConstructorPoints:
 
     def test_mercedes_points(self, basic_race):
         result = _score_full(basic_race)
-        assert result.loc[result.driver_name == "Mercedes", "points_earned"].iloc[0] == 162
+        assert (
+            result.loc[result.driver_name == "Mercedes", "points_earned"].iloc[0] == 162
+        )
 
     def test_redbull_points(self, basic_race):
         result = _score_full(basic_race)
-        assert result.loc[result.driver_name == "RedBull", "points_earned"].iloc[0] == 171
+        assert (
+            result.loc[result.driver_name == "RedBull", "points_earned"].iloc[0] == 171
+        )
 
     def test_constructor_qualifying_component(self, basic_race):
         result = _score_full(basic_race)
-        assert result.loc[result.driver_name == "RedBull", "pts_qualifying"].iloc[0] == 57
+        assert (
+            result.loc[result.driver_name == "RedBull", "pts_qualifying"].iloc[0] == 57
+        )
 
     def test_constructor_race_component(self, basic_race):
         result = _score_full(basic_race)
@@ -131,6 +157,7 @@ class TestConstructorPoints:
 # ---------------------------------------------------------------------------
 # Constructor salary tests (hand-calculated)
 # ---------------------------------------------------------------------------
+
 
 class TestConstructorSalary:
     """
@@ -144,11 +171,17 @@ class TestConstructorSalary:
 
     def test_redbull_salary(self, basic_race):
         result = _score_full(basic_race)
-        assert result.loc[result.driver_name == "RedBull", "salary_after_event"].iloc[0] == 26.2
+        assert (
+            result.loc[result.driver_name == "RedBull", "salary_after_event"].iloc[0]
+            == 26.2
+        )
 
     def test_mercedes_salary(self, basic_race):
         result = _score_full(basic_race)
-        assert result.loc[result.driver_name == "Mercedes", "salary_after_event"].iloc[0] == 27.9
+        assert (
+            result.loc[result.driver_name == "Mercedes", "salary_after_event"].iloc[0]
+            == 27.9
+        )
 
     def test_constructor_salary_cap_at_3m(self):
         """
@@ -162,22 +195,28 @@ class TestConstructorSalary:
           variation = +26.0M, raw adj = +6.5M -> capped at +3.0M
           new salary = 4.0 + 3.0 = 7.0
         """
-        df = pd.DataFrame({
-            "type":               ["driver", "driver", "driver", "driver", "team",  "team"],
-            "driver_name":        ["D1",     "D2",     "D3",     "D4",    "Alpha", "Beta"],
-            "driver_team":        ["Alpha",  "Alpha",  "Beta",   "Beta",  "",      ""],
-            "eight_race_average": [5.0,       5.0,      5.0,      5.0,    5.0,     5.0],
-            "starting_salary":    [10.0,      10.0,     10.0,     10.0,   4.0,     30.0],
-            "qualifying_position":[1,         2,        3,        4,      None,    None],
-            "finishing_position": [1,         2,        3,        4,      None,    None],
-        })
+        df = pd.DataFrame(
+            {
+                "type": ["driver", "driver", "driver", "driver", "team", "team"],
+                "driver_name": ["D1", "D2", "D3", "D4", "Alpha", "Beta"],
+                "driver_team": ["Alpha", "Alpha", "Beta", "Beta", "", ""],
+                "eight_race_average": [5.0, 5.0, 5.0, 5.0, 5.0, 5.0],
+                "starting_salary": [10.0, 10.0, 10.0, 10.0, 4.0, 30.0],
+                "qualifying_position": [1, 2, 3, 4, None, None],
+                "finishing_position": [1, 2, 3, 4, None, None],
+            }
+        )
         result = _score_full(df)
-        assert result.loc[result.driver_name == "Alpha", "salary_after_event"].iloc[0] == 7.0
+        assert (
+            result.loc[result.driver_name == "Alpha", "salary_after_event"].iloc[0]
+            == 7.0
+        )
 
 
 # ---------------------------------------------------------------------------
 # Driver salary tests (hand-calculated)
 # ---------------------------------------------------------------------------
+
 
 class TestDriverSalary:
     """
@@ -192,31 +231,52 @@ class TestDriverSalary:
 
     def test_hamilton_salary(self, basic_race):
         result = _score_full(basic_race)
-        assert result.loc[result.driver_name == "Hamilton", "salary_after_event"].iloc[0] == 28.0
+        assert (
+            result.loc[result.driver_name == "Hamilton", "salary_after_event"].iloc[0]
+            == 28.0
+        )
 
     def test_verstappen_salary(self, basic_race):
         result = _score_full(basic_race)
-        assert result.loc[result.driver_name == "Verstappen", "salary_after_event"].iloc[0] == 33.6
+        assert (
+            result.loc[result.driver_name == "Verstappen", "salary_after_event"].iloc[0]
+            == 33.6
+        )
 
     def test_perez_salary(self, basic_race):
         result = _score_full(basic_race)
-        assert result.loc[result.driver_name == "Perez", "salary_after_event"].iloc[0] == 24.8
+        assert (
+            result.loc[result.driver_name == "Perez", "salary_after_event"].iloc[0]
+            == 24.8
+        )
 
     def test_russell_salary(self, basic_race):
         result = _score_full(basic_race)
-        assert result.loc[result.driver_name == "Russell", "salary_after_event"].iloc[0] == 25.6
+        assert (
+            result.loc[result.driver_name == "Russell", "salary_after_event"].iloc[0]
+            == 25.6
+        )
 
 
 # ---------------------------------------------------------------------------
 # Edge case tests
 # ---------------------------------------------------------------------------
 
+
 class TestEdgeCases:
 
     def test_driver_output_columns(self, basic_race):
         result = _score_full(basic_race)
-        for col in ["pts_qualifying", "pts_race", "pts_overtake", "pts_improvement",
-                    "pts_completion", "pts_teammate", "points_earned", "salary_after_event"]:
+        for col in [
+            "pts_qualifying",
+            "pts_race",
+            "pts_overtake",
+            "pts_improvement",
+            "pts_completion",
+            "pts_teammate",
+            "points_earned",
+            "salary_after_event",
+        ]:
             assert col in result.columns
 
     def test_no_internal_columns_leaked(self, basic_race):
@@ -229,32 +289,39 @@ class TestEdgeCases:
         pd.testing.assert_frame_equal(basic_race, original)
 
     def test_wrong_team_size_raises(self):
-        df = pd.DataFrame({
-            "type":               ["driver"],
-            "driver_name":        ["OnlyDriver"],
-            "driver_team":        ["Lonely"],
-            "eight_race_average": [5.0],
-            "starting_salary":    [20.0],
-            "qualifying_position":[5],
-            "finishing_position": [5],
-        })
+        df = pd.DataFrame(
+            {
+                "type": ["driver"],
+                "driver_name": ["OnlyDriver"],
+                "driver_team": ["Lonely"],
+                "eight_race_average": [5.0],
+                "starting_salary": [20.0],
+                "qualifying_position": [5],
+                "finishing_position": [5],
+            }
+        )
         with pytest.raises(ValueError, match="expected 2"):
             _score_full(df)
 
     def test_big_improvement(self):
         """Driver massively overperforming their average caps at 30 improvement pts."""
-        df = pd.DataFrame({
-            "type":               ["driver",    "driver"],
-            "driver_name":        ["Backmarker","Teammate"],
-            "driver_team":        ["Slow",      "Slow"],
-            "eight_race_average": [20.0,         18.0],
-            "starting_salary":    [5.0,           6.0],
-            "qualifying_position":[20,            19],
-            "finishing_position": [8,             10],
-        })
+        df = pd.DataFrame(
+            {
+                "type": ["driver", "driver"],
+                "driver_name": ["Backmarker", "Teammate"],
+                "driver_team": ["Slow", "Slow"],
+                "eight_race_average": [20.0, 18.0],
+                "starting_salary": [5.0, 6.0],
+                "qualifying_position": [20, 19],
+                "finishing_position": [8, 10],
+            }
+        )
         result = _score_full(df)
         # qual=12, race=79, overtakes=(20-8)*3=36, improvement=30, completion=12, teammate(margin=2)=2
-        assert result.loc[result.driver_name == "Backmarker", "points_earned"].iloc[0] == 171
+        assert (
+            result.loc[result.driver_name == "Backmarker", "points_earned"].iloc[0]
+            == 171
+        )
 
     def test_overtake_clamps_at_zero(self, basic_race):
         """Russell went backwards (P3 qual -> P6 finish): no negative overtake pts."""
@@ -265,6 +332,7 @@ class TestEdgeCases:
 # ---------------------------------------------------------------------------
 # Australia 2026 round-0 integration test
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def australia_result():
@@ -281,24 +349,36 @@ def _get_row(result, abbr):
     return team_row.iloc[0]
 
 
-@pytest.mark.parametrize("abbr,exp_pts,exp_salary,exp_change", [
-    ("RUS", 164, 29.6, 0.9),
-    ("HAM", 156, 22.1, 1.2),
-    ("ANT", 161, 25.9, 1.1),
-    ("BEA", 172, 11.2, 2.0),
-    ("COL", 108,  6.7, 2.0),
-    ("FER", 161, 23.7, 1.2),
-    ("MER", 177, 28.8, 0.3),
-    ("HAS", 125,  8.0, 3.0),
-])
+@pytest.mark.parametrize(
+    "abbr,exp_pts,exp_salary,exp_change",
+    [
+        ("RUS", 164, 29.6, 0.9),
+        ("HAM", 156, 22.1, 1.2),
+        ("ANT", 161, 25.9, 1.1),
+        ("BEA", 172, 11.2, 2.0),
+        ("COL", 108, 6.7, 2.0),
+        ("VER", 151, 28.2, -1.8),
+        ("LIN", 163, 6.6, 2),
+        ("PIA", 42, 24.1, -2),
+        ("FER", 161, 23.7, 1.2),
+        ("MER", 177, 28.8, 0.3),
+        ("HAS", 125, 8.0, 3.0),
+    ],
+)
 class TestAustraliaRound0:
-    def test_points_earned(self, australia_result, abbr, exp_pts, exp_salary, exp_change):
+    def test_points_earned(
+        self, australia_result, abbr, exp_pts, exp_salary, exp_change
+    ):
         assert _get_row(australia_result, abbr)["points_earned"] == exp_pts
 
-    def test_salary_after_event(self, australia_result, abbr, exp_pts, exp_salary, exp_change):
+    def test_salary_after_event(
+        self, australia_result, abbr, exp_pts, exp_salary, exp_change
+    ):
         assert _get_row(australia_result, abbr)["salary_after_event"] == exp_salary
 
-    def test_salary_change(self, australia_result, abbr, exp_pts, exp_salary, exp_change):
+    def test_salary_change(
+        self, australia_result, abbr, exp_pts, exp_salary, exp_change
+    ):
         assert _get_row(australia_result, abbr)["salary_change"] == exp_change
 
 
@@ -307,16 +387,36 @@ class TestAustraliaRound0:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    df = pd.DataFrame({
-        "type":               ["driver",   "driver",  "driver",    "driver",  "team",     "team"],
-        "driver_name":        ["Hamilton", "Russell", "Verstappen","Perez",   "Mercedes", "RedBull"],
-        "driver_team":        ["Mercedes", "Mercedes","RedBull",   "RedBull", "",         ""],
-        "eight_race_average": [4.0,         5.5,       1.5,         4.5,      1.0,        3.0],
-        "starting_salary":    [26.0,        24.4,      34.0,        22.8,     28.0,       25.0],
-        "qualifying_position":[5,           3,         1,           4,        None,       None],
-        "finishing_position": [2,           6,         1,           4,        None,       None],
-    })
+    df = pd.DataFrame(
+        {
+            "type": ["driver", "driver", "driver", "driver", "team", "team"],
+            "driver_name": [
+                "Hamilton",
+                "Russell",
+                "Verstappen",
+                "Perez",
+                "Mercedes",
+                "RedBull",
+            ],
+            "driver_team": ["Mercedes", "Mercedes", "RedBull", "RedBull", "", ""],
+            "eight_race_average": [4.0, 5.5, 1.5, 4.5, 1.0, 3.0],
+            "starting_salary": [26.0, 24.4, 34.0, 22.8, 28.0, 25.0],
+            "qualifying_position": [5, 3, 1, 4, None, None],
+            "finishing_position": [2, 6, 1, 4, None, None],
+        }
+    )
 
     result = _score_full(df)
-    print(result[["type", "driver_name", "pts_qualifying", "pts_race",
-                  "points_earned", "starting_salary", "salary_after_event"]].to_string(index=False))
+    print(
+        result[
+            [
+                "type",
+                "driver_name",
+                "pts_qualifying",
+                "pts_race",
+                "points_earned",
+                "starting_salary",
+                "salary_after_event",
+            ]
+        ].to_string(index=False)
+    )
