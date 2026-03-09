@@ -447,14 +447,14 @@ def score_my_team(
     result = score_event(scenario, round)
 
     my_drivers = result[
-        (result["type"] == "driver") & (result["abbreviations"].isin(drivers))
+        (result["type"] == "driver") & (result["driver_abbr"].isin(drivers))
     ].copy()
     my_team = result[
         (result["type"] == "team") & (result["driver_name"] == team)
     ].copy()
 
     my_picks = pd.concat([my_drivers, my_team])
-    my_picks.loc[my_picks["abbreviations"] == star_driver, "points_earned"] *= 2
+    my_picks.loc[my_picks["driver_abbr"] == star_driver, "points_earned"] *= 2
 
     total_points = my_picks["points_earned"].sum()
     total_salary_change = my_picks["salary_change"].sum()
