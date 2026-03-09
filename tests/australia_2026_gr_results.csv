@@ -1,0 +1,23 @@
+rank,driver_abbr,driver_name,team,salary_after_event,salary_change,points_earned
+1,RUS,G. Russell,MER,29.6,0.8,164
+2,VER,M. Verstappen,RBR,28.2,-1.8,151
+3,NOR,L. Norris,MCL,26.7,-0.7,155
+4,ANT,K. Antonelli,MER,25.9,1.1,161
+5,LEC,C. Leclerc,FER,24.5,1.0,159
+6,PIA,O. Piastri,MCL,24.1,-2.0,42
+7,HAM,L. Hamilton,FER,22.1,1.2,156
+8,ALO,F. Alonso,AMR,20.2,-2.0,70
+9,GAS,P. Gasly,ALP,18.3,0.0,126
+10,HAD,I. Hadjar,RBR,17.6,-2.0,89
+11,STR,L. Stroll,AMR,15.0,-2.0,78
+12,LAW,L. Lawson,RBS,14.5,0.1,112
+13,SAI,C. Sainz Jr,WIL,13.9,-1.8,88
+14,ALB,A. Albon,WIL,13.9,0.8,114
+15,BOR,G. Bortoleto,AUD,12.5,2.0,151
+16,BEA,O. Bearman,HAS,11.2,2.0,172
+17,OCO,E. Ocon,HAS,9.9,2.0,130
+18,HUL,N. Hulkenberg,AUD,9.8,-2.0,30
+19,COL,F. Colapinto,ALP,6.7,2.0,108
+20,LIN,A. Lindblad,RBS,6.6,2.0,163
+21,PER,S. Perez,CAD,6.4,1.7,95
+22,BOT,V. Bottas,CAD,4.5,-0.2,63

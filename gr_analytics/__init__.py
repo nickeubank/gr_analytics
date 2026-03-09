@@ -147,12 +147,6 @@ def _calc_adjustment(variation: float, max_adjustment: float) -> float:
 
     truncated = max(-max_adjustment, min(max_adjustment, truncated))
 
-    # Minimum adjustment: if there's any variation, enforce at least SALARY_STEP
-    if variation > 0 and truncated < SALARY_STEP:
-        truncated = SALARY_STEP
-    elif variation < 0 and truncated > -SALARY_STEP:
-        truncated = -SALARY_STEP
-
     return truncated
 
 
