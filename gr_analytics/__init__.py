@@ -492,6 +492,7 @@ def optimal_lineup(
     locked_in: list = None,
     optimize_for: str = "points",
     budget: float = 100.0,
+    star_salary_cap: float = 19.0,
 ) -> pd.DataFrame:
     """
     Find the optimal 5-driver + 1-constructor lineup.
@@ -512,6 +513,9 @@ def optimal_lineup(
     budget : float
         Salary budget in £M available for non-locked-in picks (default 100).
         Locked-in drivers are treated as free (already under contract).
+    star_salary_cap : float
+        Maximum starting_salary allowed for the star driver (default 19.0).
+        Drivers above this threshold are excluded from star consideration.
 
     Returns
     -------
@@ -585,7 +589,10 @@ def optimal_lineup(
         return full.drop(columns=["_locked"])
 
     # --- points optimization: loop over star candidates ---
-    free_driver_idx = free[free["type"] == "driver"].index.tolist()
+    free_drivers = free[free["type"] == "driver"]
+    if star_salary_cap is not None:
+        free_drivers = free_drivers[free_drivers["starting_salary"] <= star_salary_cap]
+    free_driver_idx = free_drivers.index.tolist()
     # -1 sentinel: best star comes from locked_in set
     star_candidates = free_driver_idx + [-1]
 
@@ -611,8 +618,12 @@ def optimal_lineup(
                 -result.fun + locked[obj_col].sum() + star_pts
             )  # star_pts counted twice via obj_copy
         else:
-            # Star is the highest-points locked_in driver
+            # Star is the highest-points locked_in driver (within salary cap)
             locked_drivers = locked[locked["type"] == "driver"]
+            if star_salary_cap is not None:
+                locked_drivers = locked_drivers[
+                    locked_drivers["starting_salary"] <= star_salary_cap
+                ]
             if locked_drivers.empty:
                 total = -result.fun + locked[obj_col].sum()
             else:

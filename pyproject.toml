@@ -4,9 +4,24 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gr_analytics"
-version = "0.1.0"
+version = "0.2.0"
+description = "Scoring and salary calculation for GridRival fantasy F1"
+readme = "README.md"
 requires-python = ">=3.9"
+license = "MIT"
+authors = [
+  {name = "nce8"},
+]
+keywords = ["fantasy", "f1", "formula1", "gridrival", "motorsport"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+  "Topic :: Games/Entertainment",
+]
 dependencies = ["pandas", "scipy", "numpy"]
+
+[project.urls]
+Homepage = "https://github.com/nce8/gr_analytics"
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -10,7 +10,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from gr_analytics import _score_constructors, _score_drivers, score_event
+from gr_analytics import _score_constructors, _score_drivers, optimal_lineup, score_event
 
 _TESTS_DIR = Path(__file__).parent
 
@@ -396,6 +396,93 @@ class TestAustraliaRound0:
         self, australia_result, abbr, exp_pts, exp_salary, exp_change
     ):
         assert _get_row(australia_result, abbr)["salary_change"] == exp_change
+
+
+# ---------------------------------------------------------------------------
+# optimal_lineup star_salary_cap tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def scored_pool():
+    """
+    Five drivers + one constructor, total salary exactly 100 (at budget).
+
+    D1: salary=30, points=200  (highest points, but salary > 19 cap)
+    D2: salary=25, points=180  (second best, but salary > 19 cap)
+    D3: salary=15, points=150  (best eligible star under default cap=19)
+    D4: salary=10, points=120
+    D5: salary= 8, points=100
+    TEAM: salary=12, points=160
+
+    With cap=19 star is D3 → total = 200+180+(2*150)+120+100+160 = 1060
+    Without cap   star is D1 → total = (2*200)+180+150+120+100+160 = 1110
+    """
+    return pd.DataFrame(
+        {
+            "type": ["driver", "driver", "driver", "driver", "driver", "team"],
+            "driver_abbr": ["D1", "D2", "D3", "D4", "D5", None],
+            "driver_name": ["D1", "D2", "D3", "D4", "D5", "TEAM"],
+            "starting_salary": [30.0, 25.0, 15.0, 10.0, 8.0, 12.0],
+            "points_earned": [200.0, 180.0, 150.0, 120.0, 100.0, 160.0],
+            "salary_change": [2.0, 1.5, 1.0, 0.5, 0.0, 1.0],
+        }
+    )
+
+
+class TestOptimalLineupStarCap:
+
+    def test_default_cap_star_salary_at_most_19(self, scored_pool):
+        """Default cap=19 means the starred driver has salary ≤ 19."""
+        result = optimal_lineup(scored_pool)
+        star_row = result[result["star"] == 1]
+        assert len(star_row) == 1
+        assert star_row.iloc[0]["starting_salary"] <= 19.0
+
+    def test_default_cap_best_eligible_star_is_d3(self, scored_pool):
+        """Under cap=19 the optimal star is D3 (highest points among ≤19 drivers)."""
+        result = optimal_lineup(scored_pool)
+        star_row = result[result["star"] == 1]
+        assert star_row.iloc[0]["driver_abbr"] == "D3"
+
+    def test_no_cap_best_star_is_d1(self, scored_pool):
+        """With star_salary_cap=None, D1 (most points) becomes the star."""
+        result = optimal_lineup(scored_pool, star_salary_cap=None)
+        star_row = result[result["star"] == 1]
+        assert star_row.iloc[0]["driver_abbr"] == "D1"
+
+    def test_custom_cap_respected(self, scored_pool):
+        """star_salary_cap=25 excludes D1 (30) but allows D2 (25)."""
+        result = optimal_lineup(scored_pool, star_salary_cap=25.0)
+        star_row = result[result["star"] == 1]
+        assert star_row.iloc[0]["starting_salary"] <= 25.0
+        assert star_row.iloc[0]["driver_abbr"] == "D2"
+
+    def test_locked_in_high_salary_not_starred_under_cap(self, scored_pool):
+        """A locked-in driver with salary > cap should not be the star."""
+        # Lock in D1 (salary=30) — it's in the lineup but cap=19 blocks it as star
+        result = optimal_lineup(scored_pool, locked_in=["D1"])
+        star_rows = result[result["star"] == 1]
+        # Either no star or the star is not D1
+        if not star_rows.empty:
+            assert star_rows.iloc[0]["driver_abbr"] != "D1"
+
+    def test_locked_in_low_salary_can_be_star(self):
+        """A locked-in driver under the cap is starred when no free driver qualifies."""
+        # All free drivers have salary > 19, so the only star candidate is locked D3 (salary=15)
+        pool = pd.DataFrame(
+            {
+                "type": ["driver", "driver", "driver", "driver", "driver", "team"],
+                "driver_abbr": ["D1", "D2", "D3", "D4", "D5", None],
+                "driver_name": ["D1", "D2", "D3", "D4", "D5", "TEAM"],
+                "starting_salary": [25.0, 22.0, 15.0, 21.0, 20.0, 12.0],
+                "points_earned": [200.0, 180.0, 150.0, 120.0, 100.0, 160.0],
+                "salary_change": [2.0, 1.5, 1.0, 0.5, 0.0, 1.0],
+            }
+        )
+        result = optimal_lineup(pool, locked_in=["D3"])
+        star_row = result[result["star"] == 1]
+        assert star_row.iloc[0]["driver_abbr"] == "D3"
 
 
 # ---------------------------------------------------------------------------
