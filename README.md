@@ -1,5 +1,7 @@
 # gr_analytics
 
+![Tests](https://github.com/nickeubank/gr_analytics/actions/workflows/tests.yml/badge.svg)
+
 Python package for scoring and salary calculation in [GridRival](https://www.gridrival.com/) fantasy F1.
 
 ## Installation
@@ -70,11 +72,13 @@ Qualifying and race positions must each form a complete sequence `1..n` with no 
 `score_event` returns a DataFrame with all drivers and constructors, with scoring columns appended:
 
 **Drivers:**
+
 - `pts_qualifying`, `pts_race`, `pts_overtake`, `pts_improvement`, `pts_completion`, `pts_teammate`
 - `points_earned` — total fantasy points
 - `salary_after_event`, `salary_change`
 
 **Constructors:**
+
 - `pts_qualifying`, `pts_race` (sum across both drivers, using constructor-specific tables)
 - `points_earned`, `salary_after_event`, `salary_change`
 
@@ -83,6 +87,7 @@ Qualifying and race positions must each form a complete sequence `1..n` with no 
 All scoring follows GridRival's rules for Grand Prix events (no sprint races).
 
 ### Drivers
+
 | Bonus | Rule |
 |-------|------|
 | Qualifying | P1=50, P2=48, … P22=8 (step −2) |
@@ -93,9 +98,11 @@ All scoring follows GridRival's rules for Grand Prix events (no sprint races).
 | Teammate | Points for beating teammate by margin: ≥1 pos=2 pts, ≥4=5, ≥8=8, ≥13=12 |
 
 ### Constructors
+
 Constructor qualifying and race points use separate tables (P1=30/60, step −1/−2 per driver) summed across both drivers. No overtake, improvement, completion, or teammate bonuses.
 
 ### Salary Adjustment
+
 After each race, salaries adjust based on the gap between a driver's actual starting salary and the default salary for their points-ranking position:
 
 ```

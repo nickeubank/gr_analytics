@@ -10,7 +10,12 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from gr_analytics import _score_constructors, _score_drivers, optimal_lineup, score_event
+from gr_analytics import (
+    _score_constructors,
+    _score_drivers,
+    optimal_lineup,
+    score_event,
+)
 
 _TESTS_DIR = Path(__file__).parent
 
@@ -483,6 +488,50 @@ class TestOptimalLineupStarCap:
         result = optimal_lineup(pool, locked_in=["D3"])
         star_row = result[result["star"] == 1]
         assert star_row.iloc[0]["driver_abbr"] == "D3"
+
+    def test_budget_constraint_drops_expensive_driver(self):
+        """With budget=120 the solver must skip drivere (too expensive) and pick driverf."""
+        df = pd.DataFrame(
+            {
+                "type": [
+                    "driver",
+                    "driver",
+                    "driver",
+                    "driver",
+                    "driver",
+                    "driver",
+                    "team",
+                ],
+                "driver_abbr": [
+                    "drivera",
+                    "driverb",
+                    "driverc",
+                    "driverd",
+                    "drivere",
+                    "driverf",
+                    "has",
+                ],
+                "driver_name": [
+                    "drivera",
+                    "driverb",
+                    "driverc",
+                    "driverd",
+                    "drivere",
+                    "driverf",
+                    "has",
+                ],
+                "points_earned": [30, 30, 30, 30, 10, 7, 30],
+                "starting_salary": [20, 20, 20, 20, 20, 15, 1],
+                "salary_change": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            }
+        )
+        result = optimal_lineup(
+            df, optimize_for="points", budget=120, star_salary_cap=19.0
+        )
+        picked = set(result["driver_abbr"].dropna().tolist()) | set(
+            result.loc[result["type"] == "team", "driver_name"].tolist()
+        )
+        assert picked == {"drivera", "driverb", "driverc", "driverd", "driverf", "has"}
 
 
 # ---------------------------------------------------------------------------
