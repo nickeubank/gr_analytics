@@ -333,6 +333,18 @@ class TestEdgeCases:
         result = _score_full(basic_race)
         assert result.loc[result.driver_name == "Russell", "pts_overtake"].iloc[0] == 0
 
+    def test_score_event_unknown_driver_abbr_raises(self):
+        """score_event raises ValueError when scenario contains a driver_abbr not in driver_data."""
+        scenario = pd.read_csv(_TESTS_DIR / "test_australia.csv")
+        # Replace one valid abbreviation with a bogus one
+        scenario.loc[scenario["driver_abbr"] == "VER", "driver_abbr"] = "ZZZ"
+        with pytest.raises(ValueError, match="driver_abbr mismatch") as exc_info:
+            score_event(scenario, round=0)
+        # Both directions should be reported
+        msg = str(exc_info.value)
+        assert "ZZZ" in msg, "error should mention the unknown abbreviation"
+        assert "VER" in msg, "error should mention the missing driver from driver_data"
+
 
 # ---------------------------------------------------------------------------
 # Australia 2026 round-0 integration test
@@ -532,6 +544,168 @@ class TestOptimalLineupStarCap:
             result.loc[result["type"] == "team", "driver_name"].tolist()
         )
         assert picked == {"drivera", "driverb", "driverc", "driverd", "driverf", "has"}
+
+
+# ---------------------------------------------------------------------------
+# locked_out tests
+# ---------------------------------------------------------------------------
+
+
+class TestLockedOut:
+
+    def test_locked_out_excludes_high_value_driver(self):
+        """A driver worth 999 points at cost 1 is excluded when locked_out."""
+        df = pd.DataFrame(
+            {
+                "type": [
+                    "driver",
+                    "driver",
+                    "driver",
+                    "driver",
+                    "driver",
+                    "driver",
+                    "team",
+                ],
+                "driver_abbr": ["GOD", "D1", "D2", "D3", "D4", "D5", None],
+                "driver_name": ["GOD", "D1", "D2", "D3", "D4", "D5", "TEAM"],
+                "starting_salary": [1.0, 15.0, 15.0, 15.0, 15.0, 15.0, 10.0],
+                "points_earned": [999.0, 50.0, 40.0, 30.0, 20.0, 10.0, 60.0],
+                "salary_change": [9.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            }
+        )
+        result = optimal_lineup(df, locked_out=["GOD"], star_salary_cap=None)
+        picked_abbrs = set(result["driver_abbr"].dropna())
+        assert "GOD" not in picked_abbrs
+
+    def test_locked_out_team_excluded(self):
+        """A constructor is excluded when its team code is in locked_out."""
+        df = pd.DataFrame(
+            {
+                "type": [
+                    "driver",
+                    "driver",
+                    "driver",
+                    "driver",
+                    "driver",
+                    "team",
+                    "team",
+                ],
+                "driver_abbr": ["D1", "D2", "D3", "D4", "D5", None, None],
+                "driver_name": ["D1", "D2", "D3", "D4", "D5", "GOOD", "BAD"],
+                "starting_salary": [15.0, 15.0, 15.0, 15.0, 15.0, 10.0, 1.0],
+                "points_earned": [50.0, 40.0, 30.0, 20.0, 10.0, 60.0, 999.0],
+                "salary_change": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 9.0],
+            }
+        )
+        result = optimal_lineup(df, locked_out=["BAD"], star_salary_cap=None)
+        picked_teams = set(result.loc[result["type"] == "team", "driver_name"])
+        assert "BAD" not in picked_teams
+
+
+# ---------------------------------------------------------------------------
+# optimize_for balance (float) tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def balance_pool():
+    """
+    Pool where points-optimal and salary_change-optimal lineups differ.
+
+    D1: high points, low salary_change
+    D2: low points, high salary_change
+    D3–D5: filler
+    """
+    return pd.DataFrame(
+        {
+            "type": ["driver", "driver", "driver", "driver", "driver", "team"],
+            "driver_abbr": ["D1", "D2", "D3", "D4", "D5", None],
+            "driver_name": ["D1", "D2", "D3", "D4", "D5", "TEAM"],
+            "starting_salary": [18.0, 18.0, 10.0, 10.0, 10.0, 10.0],
+            "points_earned": [200.0, 50.0, 100.0, 100.0, 100.0, 100.0],
+            "salary_change": [0.0, 5.0, 1.0, 1.0, 1.0, 1.0],
+        }
+    )
+
+
+class TestOptimizeForBalance:
+
+    def test_balance_1_matches_points(self, balance_pool):
+        """optimize_for=1.0 should pick same drivers as optimize_for='points'."""
+        result_pts = optimal_lineup(balance_pool, optimize_for="points")
+        result_bal = optimal_lineup(balance_pool, optimize_for=1.0)
+        pts_abbrs = sorted(result_pts["driver_abbr"].dropna().tolist())
+        bal_abbrs = sorted(result_bal["driver_abbr"].dropna().tolist())
+        assert bal_abbrs == pts_abbrs
+
+    def test_balance_0_matches_salary_change(self, balance_pool):
+        """optimize_for=0.0 should pick same drivers as optimize_for='salary_change'."""
+        result_sal = optimal_lineup(balance_pool, optimize_for="salary_change")
+        result_bal = optimal_lineup(balance_pool, optimize_for=0.0)
+        sal_abbrs = sorted(result_sal["driver_abbr"].dropna().tolist())
+        bal_abbrs = sorted(result_bal["driver_abbr"].dropna().tolist())
+        assert bal_abbrs == sal_abbrs
+
+    def test_balance_star_assigned_when_balance_positive(self, balance_pool):
+        """When optimize_for is a positive float, a star driver should be assigned
+        and their points_earned should be doubled."""
+        result = optimal_lineup(balance_pool, optimize_for=0.5)
+        assert (result["star"] == 1).sum() == 1
+        star_row = result[result["star"] == 1].iloc[0]
+        orig_pts = balance_pool.loc[
+            balance_pool["driver_abbr"] == star_row["driver_abbr"], "points_earned"
+        ].iloc[0]
+        assert star_row["points_earned"] == orig_pts * 2
+
+    def test_balance_0_star_assigned_to_highest_pts(self, balance_pool):
+        """When balance=0, the highest-points eligible driver is still starred
+        and their points_earned is doubled."""
+        result = optimal_lineup(balance_pool, optimize_for=0.0)
+        assert (result["star"] == 1).sum() == 1
+        star_row = result[result["star"] == 1].iloc[0]
+        # D1 has the highest points (200) in the pool
+        assert star_row["driver_abbr"] == "D1"
+        assert star_row["points_earned"] == 400.0
+
+    def test_balance_out_of_range_raises(self, balance_pool):
+        """optimize_for outside [0, 1] should raise ValueError."""
+        with pytest.raises(ValueError, match="between 0 and 1"):
+            optimal_lineup(balance_pool, optimize_for=1.5)
+        with pytest.raises(ValueError, match="between 0 and 1"):
+            optimal_lineup(balance_pool, optimize_for=-0.1)
+
+    def test_balance_midpoint_blends_objectives(self):
+        """
+        At balance=0.5 the solver should prefer the candidate that best
+        combines normalised points and salary change.
+
+        D1: pts=200, sal_change=0 → obj = (200/100)*0.5 + 0*0.5 = 1.0
+        D2: pts=50,  sal_change=5 → obj = (50/100)*0.5 + 5*0.5  = 2.75
+        With budget=68 only one of D1/D2 fits alongside D3–D6+TEAM.
+        D2 has higher blended obj → solver picks D2 over D1.
+        """
+        df = pd.DataFrame(
+            {
+                "type": [
+                    "driver",
+                    "driver",
+                    "driver",
+                    "driver",
+                    "driver",
+                    "driver",
+                    "team",
+                ],
+                "driver_abbr": ["D1", "D2", "D3", "D4", "D5", "D6", None],
+                "driver_name": ["D1", "D2", "D3", "D4", "D5", "D6", "TEAM"],
+                "starting_salary": [18.0, 18.0, 10.0, 10.0, 10.0, 10.0, 10.0],
+                "points_earned": [200.0, 50.0, 100.0, 100.0, 100.0, 100.0, 100.0],
+                "salary_change": [0.0, 5.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            }
+        )
+        result = optimal_lineup(df, optimize_for=0.5, budget=68.0)
+        picked = set(result["driver_abbr"].dropna())
+        assert "D2" in picked
+        assert "D1" not in picked
 
 
 # ---------------------------------------------------------------------------

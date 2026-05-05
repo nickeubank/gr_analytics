@@ -388,27 +388,62 @@ def score_event(scenario: pd.DataFrame, round: int = None) -> pd.DataFrame:
     """
     Score a Grand Prix event for drivers and constructors.
 
+    Merges ``scenario`` with the built-in ``driver_data.csv`` for the given
+    round to obtain starting salaries, team affiliations, eight-race
+    averages, and constructor rows. Then scores every driver and
+    constructor and computes post-event salary adjustments.
+
     Parameters
     ----------
-    scenario : DataFrame with columns:
-        driver_abbr, qualifying_position, race_position
-        completed_qualifying: 1 if driver completed qualifying, 0 if DNQ.
-            DNQ drivers get 0 qualifying points but overtake points still
-            use their official qualifying_position.
-        completed_pct (optional): fraction of race completed (0.0-1.0).
-            Used to calculate completion bonus (3 pts each at 25/50/75/90%).
-            Defaults to 1.0 (full completion) if column is absent.
+    scenario : DataFrame
+        One row per driver with the following columns:
+
+        - **driver_abbr** : str — three-letter driver code (e.g. "VER").
+        - **qualifying_position** : int — grid position (1–22).
+        - **race_position** : int — finishing position (1–22).
+        - **completed_qualifying** : int (0 or 1), optional — whether the
+          driver set a qualifying time. DNQ drivers (0) receive 0
+          qualifying points but overtake points still use their official
+          qualifying_position. Defaults to 1 if column is absent.
+        - **completed_pct** : float or "DNS", optional — fraction of race
+          distance completed (0.0–1.0), or the string "DNS" for drivers
+          who did not start. Used to calculate completion bonus (3 pts
+          each at 25%/50%/75%/90%). DNS drivers receive 0 for all
+          race-related points. Defaults to 1.0 (full completion) if
+          column is absent.
+
+        Qualifying and race positions must each be a complete 1…n
+        sequence with no duplicates.
+
     round : int, optional
-        Race round number. Defaults to the maximum round in driver_data.
+        Race round number used to look up driver/constructor data (salary,
+        eight-race average, team mapping). Defaults to the maximum round
+        in driver_data.
 
     Returns
     -------
-    DataFrame with scoring columns appended.
-    Drivers get: pts_qualifying, pts_race, pts_overtake, pts_improvement,
-                 pts_completion, pts_teammate, points_earned, salary_after_event,
-                 salary_change
-    Constructors get: pts_qualifying, pts_race, points_earned, salary_after_event,
-                salary_change
+    DataFrame
+        All driver and constructor rows with scoring columns appended.
+
+        **Drivers:** pts_qualifying, pts_race, pts_overtake,
+        pts_improvement, pts_completion, pts_teammate, points_earned,
+        salary_after_event, salary_change.
+
+        **Constructors:** pts_qualifying, pts_race, points_earned,
+        salary_after_event, salary_change (qualifying and race points
+        are the sum of constructor-specific point tables across both
+        drivers, not the driver tables).
+
+    Raises
+    ------
+    ValueError
+        If qualifying or race positions contain duplicates, gaps, or
+        out-of-range values.
+
+    Notes
+    -----
+    If the driver_data contains a ``held`` column with value 1, the
+    function prints the total points and salary change for held picks.
     """
     _validate_scenario(scenario)
 
@@ -419,6 +454,28 @@ def score_event(scenario: pd.DataFrame, round: int = None) -> pd.DataFrame:
 
     drivers_dd = dd[dd["type"] == "driver"].copy()
     teams_dd = dd[dd["type"] == "team"].copy()
+
+    # Validate driver_abbr values before merging
+    dd_abbrs = set(drivers_dd["driver_abbr"])
+    scenario_abbrs = set(scenario["driver_abbr"])
+    missing_from_scenario = dd_abbrs - scenario_abbrs
+    missing_from_dd = scenario_abbrs - dd_abbrs
+    errors = []
+    if missing_from_scenario:
+        errors.append(
+            f"Drivers in driver_data (round {round}) but not in scenario: "
+            f"{sorted(missing_from_scenario)}"
+        )
+    if missing_from_dd:
+        errors.append(
+            f"Drivers in scenario but not in driver_data (round {round}): "
+            f"{sorted(missing_from_dd)}"
+        )
+    if errors:
+        raise ValueError(
+            "driver_abbr mismatch between scenario and driver_data:\n"
+            + "\n".join(f"  - {e}" for e in errors)
+        )
 
     drivers_merged = drivers_dd.merge(
         scenario,
@@ -472,7 +529,7 @@ def score_my_team(
         (result["type"] == "driver") & (result["driver_abbr"].isin(drivers))
     ].copy()
     my_team = result[
-        (result["type"] == "team") & (result["driver_name"] == team)
+        (result["type"] == "team") & (result["driver_abbr"] == team)
     ].copy()
 
     my_picks = pd.concat([my_drivers, my_team])
@@ -490,7 +547,8 @@ def score_my_team(
 def optimal_lineup(
     scored: pd.DataFrame,
     locked_in: list = None,
-    optimize_for: str = "points",
+    locked_out: list = None,
+    optimize_for="points",
     budget: float = 100.0,
     star_salary_cap: float = 19.0,
 ) -> pd.DataFrame:
@@ -505,11 +563,17 @@ def optimal_lineup(
         driver_abbr values (drivers) or driver_name team codes (e.g. "MER")
         that must appear in the lineup. These count against the budget and
         the 5-driver / 1-constructor slot limits.
-    optimize_for : {"points", "salary_change"}
-        Objective to maximise. For "points", the star driver (who earns
-        double points) is chosen optimally across all candidates. For
-        "salary_change", the lineup maximises total salary change; no star
-        is designated since the star does not affect salary in GR.
+    locked_out : list of str, optional
+        driver_abbr values (drivers) or driver_name team codes that must
+        be excluded from the lineup. These are removed from the candidate
+        pool before optimisation.
+    optimize_for : {"points", "salary_change"} or float
+        Objective to maximise. ``"points"`` is equivalent to balance=1
+        (pure points with star doubling). ``"salary_change"`` is equivalent
+        to balance=0 (pure salary change). A float between 0 and 1 blends:
+        ``objective = (points_earned / 100) * balance + salary_change * (1 - balance)``
+        The star driver (whose points component is doubled) is chosen
+        optimally whenever balance > 0.
     budget : float
         Salary budget in £M available for non-locked-in picks (default 100).
         Locked-in drivers are treated as free (already under contract).
@@ -520,16 +584,35 @@ def optimal_lineup(
     Returns
     -------
     DataFrame with the 6 selected rows plus a `star` column (1 = starred
-    driver, only set when optimize_for="points").
+    driver, set when optimize_for="points" or a float balance > 0).
     """
     if locked_in is None:
         locked_in = []
-    if optimize_for not in ("points", "salary_change"):
-        raise ValueError("optimize_for must be 'points' or 'salary_change'")
+    if locked_out is None:
+        locked_out = []
 
-    obj_col = "points_earned" if optimize_for == "points" else "salary_change"
+    # Determine balance: 1.0 = pure points, 0.0 = pure salary_change
+    if isinstance(optimize_for, (int, float)) and not isinstance(optimize_for, bool):
+        balance = float(optimize_for)
+        if not 0.0 <= balance <= 1.0:
+            raise ValueError("optimize_for as a float must be between 0 and 1")
+    elif optimize_for == "points":
+        balance = 1.0
+    elif optimize_for == "salary_change":
+        balance = 0.0
+    else:
+        raise ValueError(
+            "optimize_for must be 'points', 'salary_change', or a float between 0 and 1"
+        )
 
     df = scored.copy()
+
+    # Remove locked-out entries from the pool entirely
+    _is_locked_out = df["driver_abbr"].isin(locked_out) | (
+        (df["type"] == "team") & df["driver_name"].isin(locked_out)
+    )
+    df = df[~_is_locked_out].copy()
+
     df["_locked"] = df["driver_abbr"].isin(locked_in) | (
         (df["type"] == "team") & df["driver_name"].isin(locked_in)
     )
@@ -554,7 +637,9 @@ def optimal_lineup(
     free = free.sort_values("type").reset_index(drop=True)
 
     salaries_arr = free["starting_salary"].values.astype(float)
-    obj_arr = free[obj_col].values.astype(float)
+    pts_arr = free["points_earned"].values.astype(float)
+    sal_arr = free["salary_change"].values.astype(float)
+    obj_arr = pts_arr / 100.0 * balance + sal_arr * (1.0 - balance)
 
     bounds = Bounds(0, 1)
     integrality = np.ones(len(free))
@@ -581,14 +666,16 @@ def optimal_lineup(
             raise RuntimeError(f"Optimization failed: {result.message}")
         return result
 
-    if optimize_for == "salary_change":
-        result = _run_milp(obj_arr)
-        picked = free[result.x.astype(bool)].copy()
-        full = pd.concat([picked, locked], ignore_index=True)
-        full["star"] = 0
-        return full.drop(columns=["_locked"])
+    # Locked contribution for total comparison
+    if not locked.empty:
+        locked_obj = (
+            locked["points_earned"].values.astype(float) / 100.0 * balance
+            + locked["salary_change"].values.astype(float) * (1.0 - balance)
+        ).sum()
+    else:
+        locked_obj = 0.0
 
-    # --- points optimization: loop over star candidates ---
+    # --- star optimization: loop over star candidates ---
     free_drivers = free[free["type"] == "driver"]
     if star_salary_cap is not None:
         free_drivers = free_drivers[free_drivers["starting_salary"] <= star_salary_cap]
@@ -602,7 +689,8 @@ def optimal_lineup(
     for i in star_candidates:
         obj_copy = obj_arr.copy()
         if i != -1:
-            obj_copy[i] *= 2
+            # Star doubles points_earned only → add the points component again
+            obj_copy[i] += pts_arr[i] / 100.0 * balance
 
         result = _run_milp(obj_copy)
         picked = free[result.x.astype(bool)].copy()
@@ -612,11 +700,8 @@ def optimal_lineup(
         if i != -1:
             star_abbr = free.at[i, "driver_abbr"]
             full.loc[full["driver_abbr"] == star_abbr, "star"] = 1
-            # total = doubled star pts + rest
-            star_pts = free.at[i, obj_col]
-            total = (
-                -result.fun + locked[obj_col].sum() + star_pts
-            )  # star_pts counted twice via obj_copy
+            star_bonus = pts_arr[i] / 100.0 * balance
+            total = -result.fun + locked_obj + star_bonus
         else:
             # Star is the highest-points locked_in driver (within salary cap)
             locked_drivers = locked[locked["type"] == "driver"]
@@ -625,15 +710,30 @@ def optimal_lineup(
                     locked_drivers["starting_salary"] <= star_salary_cap
                 ]
             if locked_drivers.empty:
-                total = -result.fun + locked[obj_col].sum()
+                total = -result.fun + locked_obj
             else:
-                best_row = locked_drivers.loc[locked_drivers[obj_col].idxmax()]
+                best_row = locked_drivers.loc[locked_drivers["points_earned"].idxmax()]
                 star_abbr = best_row["driver_abbr"]
                 full.loc[full["driver_abbr"] == star_abbr, "star"] = 1
-                total = -result.fun + locked[obj_col].sum() + best_row[obj_col]
+                star_bonus = best_row["points_earned"] / 100.0 * balance
+                total = -result.fun + locked_obj + star_bonus
 
         if total > best_total:
             best_total = total
             best_full = full
+
+    # When balance == 0 the star bonus is zero so the loop picks
+    # arbitrarily.  Override to star the highest-points eligible driver.
+    if balance == 0.0:
+        best_full["star"] = 0
+        eligible = best_full[best_full["type"] == "driver"]
+        if star_salary_cap is not None:
+            eligible = eligible[eligible["starting_salary"] <= star_salary_cap]
+        if not eligible.empty:
+            best_full.loc[eligible["points_earned"].idxmax(), "star"] = 1
+
+    # Double points_earned for the starred driver so the returned
+    # DataFrame reflects actual fantasy points with star doubling.
+    best_full.loc[best_full["star"] == 1, "points_earned"] *= 2
 
     return best_full.drop(columns=["_locked"])
