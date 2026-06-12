@@ -34,6 +34,16 @@ def driver_data() -> pd.DataFrame:
     return pd.read_csv(_DATA_DIR / "driver_data.csv")
 
 
+def race_results() -> pd.DataFrame:
+    """
+    Load and return race_results.csv as a DataFrame.
+
+    One row per driver per round with the official classified finishing
+    position (DNF/DNS drivers receive their classified position).
+    """
+    return pd.read_csv(_DATA_DIR / "race_results.csv")
+
+
 # ---------------------------------------------------------------------------
 # Lookup tables — Drivers
 # ---------------------------------------------------------------------------
@@ -328,6 +338,75 @@ def _score_constructors(
 # ---------------------------------------------------------------------------
 # Public functions
 # ---------------------------------------------------------------------------
+
+
+def eight_race_average(initial_average: float, finishing_positions: list) -> int:
+    """
+    GridRival's eight-race average after a sequence of races.
+
+    GridRival seeds each driver's season with 8 "slots" holding a
+    hard-coded initial average. Each race replaces one slot with the
+    driver's official classified finishing position, so after 8 races the
+    initial average has fully rolled off and the value is a true rolling
+    average of the last 8 finishes. The displayed value is the ceiling of
+    the slot mean (verified against GridRival's displayed values for
+    rounds 1-4 of 2026).
+
+    Parameters
+    ----------
+    initial_average : float
+        The hard-coded season-start average (round 0 of driver_data).
+    finishing_positions : list of int
+        Classified finishing positions in every race so far, oldest first.
+
+    Returns
+    -------
+    int
+        The eight-race average as GridRival displays it.
+    """
+    slots = [initial_average] * 8 + [int(p) for p in finishing_positions]
+    return math.ceil(sum(slots[-8:]) / 8)
+
+
+def calculate_eight_race_averages(through_round: int = None) -> pd.Series:
+    """
+    Compute every driver's eight-race average after ``through_round``.
+
+    Uses the round-0 seeds in driver_data.csv and the finishing positions
+    in race_results.csv. Matches the convention of driver_data, where the
+    round-N row holds the state *after* race N (so the returned values are
+    what GridRival displays going into race N+1).
+
+    Parameters
+    ----------
+    through_round : int, optional
+        Include races 1 through this round. Defaults to the latest round
+        in race_results. Pass 0 to get the season-start seeds.
+
+    Returns
+    -------
+    Series
+        Eight-race average indexed by driver_abbr.
+    """
+    dd = driver_data()
+    seeds = (
+        dd[(dd["type"] == "driver") & (dd["round"] == 0)]
+        .set_index("driver_abbr")["eight_race_average"]
+    )
+
+    results = race_results()
+    if through_round is None:
+        through_round = results["round"].max()
+    results = results[results["round"] <= through_round].sort_values("round")
+
+    averages = {
+        abbr: eight_race_average(
+            seed,
+            results.loc[results["driver_abbr"] == abbr, "finishing_position"],
+        )
+        for abbr, seed in seeds.items()
+    }
+    return pd.Series(averages, name="eight_race_average").rename_axis("driver_abbr")
 
 
 def _validate_scenario(scenario: pd.DataFrame) -> None:

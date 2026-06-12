@@ -118,6 +118,31 @@ Bundled driver data (`gr_analytics/data/driver_data.csv`) contains starting sala
 - `round=0` — pre-season (before Australia 2026)
 - `round=1` — post-Australia 2026
 
+## Eight-Race Average
+
+GridRival's "8 race average" can be computed instead of entered by hand.
+GridRival seeds the season with 8 slots holding a hard-coded initial
+average (the `round=0` values in driver_data); each race replaces one
+slot with the driver's classified finishing position, and the displayed
+value is the **ceiling** of the slot mean. Race finishing positions live
+in `gr_analytics/data/race_results.csv`.
+
+```python
+from gr_analytics import calculate_eight_race_averages, eight_race_average
+
+# All drivers, after the latest round in race_results.csv
+calculate_eight_race_averages()
+
+# All drivers, after round 2
+calculate_eight_race_averages(through_round=2)
+
+# Single driver from scratch: seed 1, finished P6 then P16
+eight_race_average(1, [6, 16])
+```
+
+This reproduces GridRival's displayed values exactly for all rounds so
+far (verified in `tests/test_eight_race_average.py`).
+
 ## Lineup Optimisation
 
 `optimal_lineup` uses mixed-integer linear programming (via `scipy.optimize.milp`) to find the best 5-driver + 1-constructor lineup within a salary budget.
