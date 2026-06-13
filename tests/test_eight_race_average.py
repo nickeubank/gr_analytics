@@ -65,8 +65,23 @@ class TestEightRaceAverage:
 # ---------------------------------------------------------------------------
 
 
+def _rounds_with_recorded_averages():
+    """Rounds whose driver rows have GridRival eight_race_average values.
+
+    Later rounds may be entered with only salary/points (eight_race_average
+    left blank until the corresponding race_results are added), so we only
+    check rounds where GridRival's own values exist to compare against.
+    """
+    dd = driver_data()
+    drivers = dd[dd["type"] == "driver"]
+    have_values = drivers.groupby("round")["eight_race_average"].apply(
+        lambda s: s.notna().all()
+    )
+    return sorted(have_values[have_values].index)
+
+
 class TestAgreementWithGridRival:
-    @pytest.mark.parametrize("rnd", sorted(driver_data()["round"].unique()))
+    @pytest.mark.parametrize("rnd", _rounds_with_recorded_averages())
     def test_matches_driver_data_sheet(self, rnd):
         """Computed averages must equal GridRival's values for every round."""
         dd = driver_data()
