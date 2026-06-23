@@ -34,16 +34,6 @@ def driver_data() -> pd.DataFrame:
     return pd.read_csv(_DATA_DIR / "driver_data.csv")
 
 
-def race_results() -> pd.DataFrame:
-    """
-    Load and return race_results.csv as a DataFrame.
-
-    One row per driver per round with the official classified finishing
-    position (DNF/DNS drivers receive their classified position).
-    """
-    return pd.read_csv(_DATA_DIR / "race_results.csv")
-
-
 # ---------------------------------------------------------------------------
 # Lookup tables — Drivers
 # ---------------------------------------------------------------------------
@@ -372,16 +362,19 @@ def calculate_eight_race_averages(through_round: int = None) -> pd.Series:
     """
     Compute every driver's eight-race average after ``through_round``.
 
-    Uses the round-0 seeds in driver_data.csv and the finishing positions
-    in race_results.csv. Matches the convention of driver_data, where the
-    round-N row holds the state *after* race N (so the returned values are
-    what GridRival displays going into race N+1).
+    Reads everything from driver_data.csv: the round-0 ``eight_race_average``
+    seeds and the per-race ``finishing_position`` recorded on each driver's
+    round row (the round-N row holds the finishing position from race N,
+    parallel to ``points_from_last_race``). Matches the convention of
+    driver_data, where the round-N row holds the state *after* race N (so
+    the returned values are what GridRival displays going into race N+1).
 
     Parameters
     ----------
     through_round : int, optional
         Include races 1 through this round. Defaults to the latest round
-        in race_results. Pass 0 to get the season-start seeds.
+        whose finishing positions are recorded in driver_data. Pass 0 to
+        get the season-start seeds.
 
     Returns
     -------
@@ -389,20 +382,20 @@ def calculate_eight_race_averages(through_round: int = None) -> pd.Series:
         Eight-race average indexed by driver_abbr.
     """
     dd = driver_data()
-    seeds = (
-        dd[(dd["type"] == "driver") & (dd["round"] == 0)]
-        .set_index("driver_abbr")["eight_race_average"]
-    )
+    drivers = dd[dd["type"] == "driver"]
+    seeds = drivers[drivers["round"] == 0].set_index("driver_abbr")[
+        "eight_race_average"
+    ]
 
-    results = race_results()
+    finishes = drivers[(drivers["round"] >= 1) & drivers["finishing_position"].notna()]
     if through_round is None:
-        through_round = results["round"].max()
-    results = results[results["round"] <= through_round].sort_values("round")
+        through_round = int(finishes["round"].max())
+    finishes = finishes[finishes["round"] <= through_round].sort_values("round")
 
     averages = {
         abbr: eight_race_average(
             seed,
-            results.loc[results["driver_abbr"] == abbr, "finishing_position"],
+            finishes.loc[finishes["driver_abbr"] == abbr, "finishing_position"],
         )
         for abbr, seed in seeds.items()
     }
@@ -531,6 +524,11 @@ def score_event(scenario: pd.DataFrame, round: int = None) -> pd.DataFrame:
         round = dd["round"].max()
     dd = dd[dd["round"] == round].copy()
 
+    # `finishing_position` stored in driver_data is the historical race result
+    # (used only for the eight-race average); the race being scored is supplied
+    # by `scenario`, so drop the stored column to avoid a merge collision.
+    dd = dd.drop(columns=["finishing_position"], errors="ignore")
+
     drivers_dd = dd[dd["type"] == "driver"].copy()
     teams_dd = dd[dd["type"] == "team"].copy()
 
@@ -561,6 +559,15 @@ def score_event(scenario: pd.DataFrame, round: int = None) -> pd.DataFrame:
         on="driver_abbr",
         how="left",
     ).rename(columns={"race_position": "finishing_position"})
+
+    # Improvement points compare each driver's finish to GridRival's eight-race
+    # average *going into* this race — i.e. the average as of the end of `round`,
+    # the state the scenario is scored against (round=0 scores race 1 off the
+    # season-start seeds). Compute it rather than trust the stored
+    # eight_race_average column, which is left blank for rounds whose GridRival
+    # value hasn't been transcribed.
+    avgs = calculate_eight_race_averages(through_round=round)
+    drivers_merged["eight_race_average"] = drivers_merged["driver_abbr"].map(avgs)
 
     df = pd.concat([drivers_merged, teams_dd], ignore_index=True)
 

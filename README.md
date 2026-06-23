@@ -22,7 +22,8 @@ scenario = pd.read_csv("my_race.csv")
 # Score the event (defaults to the latest round in driver_data)
 result = score_event(scenario)
 
-# Or score a specific round
+# Or score a specific race: pass the round one less than the race
+# (round=1 is the post-race-1 state, so this scores race 2). See "Driver Data".
 result = score_event(scenario, round=1)
 
 # Score your specific team selection
@@ -118,19 +119,31 @@ Bundled driver data (`gr_analytics/data/driver_data.csv`) contains starting sala
 - `round=0` — pre-season (before Australia 2026)
 - `round=1` — post-Australia 2026
 
+Each `round=N` row holds the state **after** race N: the post-race salaries,
+the finishing position from race N, and the 8-race average including race N.
+
+**Round semantics for `score_event`:** the `round` argument is that
+post-race state, so `score_event(scenario, round=N)` scores the race that
+*follows* it. Pass the round **one less** than the race you're scoring:
+`round=0` scores race 1 (off the pre-season seeds), `round=1` scores race 2,
+and so on. Improvement points therefore compare each finish to the 8-race
+average *going into* that race (`calculate_eight_race_averages(through_round=round)`).
+
 ## Eight-Race Average
 
 GridRival's "8 race average" can be computed instead of entered by hand.
 GridRival seeds the season with 8 slots holding a hard-coded initial
 average (the `round=0` values in driver_data); each race replaces one
 slot with the driver's classified finishing position, and the displayed
-value is the **ceiling** of the slot mean. Race finishing positions live
-in `gr_analytics/data/race_results.csv`.
+value is the **ceiling** of the slot mean. Each driver's finishing
+position per race is recorded in the `finishing_position` column of
+`driver_data.csv` (the `round=N` row holds the finish from race N), so
+the average is derived entirely from `driver_data`.
 
 ```python
 from gr_analytics import calculate_eight_race_averages, eight_race_average
 
-# All drivers, after the latest round in race_results.csv
+# All drivers, after the latest round with recorded finishing positions
 calculate_eight_race_averages()
 
 # All drivers, after round 2
@@ -142,6 +155,12 @@ eight_race_average(1, [6, 16])
 
 This reproduces GridRival's displayed values exactly for all rounds so
 far (verified in `tests/test_eight_race_average.py`).
+
+`score_event` uses this computed average for improvement points (the value
+*going into* the race, i.e. `calculate_eight_race_averages(through_round=round)`)
+rather than the stored `eight_race_average` column. That column is kept only as
+GridRival's transcribed ground-truth/test oracle and may be blank for recent
+rounds; scoring no longer depends on it.
 
 ## Lineup Optimisation
 

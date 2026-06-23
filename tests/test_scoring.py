@@ -13,6 +13,8 @@ import pytest
 from gr_analytics import (
     _score_constructors,
     _score_drivers,
+    calculate_eight_race_averages,
+    driver_data,
     optimal_lineup,
     score_event,
 )
@@ -413,6 +415,59 @@ class TestAustraliaRound0:
         self, australia_result, abbr, exp_pts, exp_salary, exp_change
     ):
         assert _get_row(australia_result, abbr)["salary_change"] == exp_change
+
+
+# ---------------------------------------------------------------------------
+# score_event derives the eight-race average from driver_data
+# ---------------------------------------------------------------------------
+
+
+class TestScoreEventEightRaceAverage:
+    """score_event computes the eight-race average from the recorded
+    finishing positions (calculate_eight_race_averages) rather than trusting
+    the hard-coded eight_race_average column. So it works for rounds whose
+    GridRival value was never transcribed (the column is blank), and uses the
+    average going *into* the race being scored (through_round == round)."""
+
+    @staticmethod
+    def _scenario_from_finishes(rnd):
+        d = driver_data()
+        d = d[(d["type"] == "driver") & (d["round"] == rnd)][
+            ["driver_abbr", "finishing_position"]
+        ].copy()
+        d["finishing_position"] = d["finishing_position"].astype(int)
+        return pd.DataFrame(
+            {
+                "driver_abbr": d["driver_abbr"],
+                "qualifying_position": d["finishing_position"],
+                "race_position": d["finishing_position"],
+            }
+        )
+
+    @pytest.mark.parametrize("rnd", [1, 2, 3, 4, 5, 6, 7])
+    def test_uses_average_through_round(self, rnd):
+        """The average score_event applies equals calculate_eight_race_averages
+        through that round — the state going into the race scored at `round`."""
+        result = score_event(self._scenario_from_finishes(rnd), round=rnd)
+        used = (
+            result[result["type"] == "driver"]
+            .set_index("driver_abbr")["eight_race_average"]
+            .astype(int)
+            .sort_index()
+        )
+        expected = (
+            calculate_eight_race_averages(through_round=rnd).astype(int).sort_index()
+        )
+        pd.testing.assert_series_equal(used, expected, check_names=False)
+
+    @pytest.mark.parametrize("rnd", [5, 6, 7])
+    def test_blank_column_rounds_score_finite(self, rnd):
+        """Rounds whose eight_race_average column is blank must still score —
+        before the average was computed, this raised on NaN improvement."""
+        result = score_event(self._scenario_from_finishes(rnd), round=rnd)
+        drivers = result[result["type"] == "driver"]
+        assert drivers["pts_improvement"].notna().all()
+        assert drivers["points_earned"].notna().all()
 
 
 # ---------------------------------------------------------------------------

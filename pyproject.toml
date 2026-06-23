@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gr_analytics"
-version = "0.3.2"
+version = "0.4.0"
 description = "Scoring and salary calculation for GridRival fantasy F1"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -17,6 +17,10 @@ classifiers = [
   "Topic :: Games/Entertainment",
 ]
 dependencies = ["pandas", "scipy", "numpy"]
+
+[project.optional-dependencies]
+# Only needed for gr_analytics.get_positions (fetching finishing positions).
+fastf1 = ["fastf1"]
 
 [project.urls]
 Homepage = "https://github.com/nce8/gr_analytics"

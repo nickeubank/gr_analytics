@@ -13,7 +13,6 @@ from gr_analytics import (
     calculate_eight_race_averages,
     driver_data,
     eight_race_average,
-    race_results,
 )
 
 _TESTS_DIR = Path(__file__).parent
@@ -69,8 +68,8 @@ def _rounds_with_recorded_averages():
     """Rounds whose driver rows have GridRival eight_race_average values.
 
     Later rounds may be entered with only salary/points (eight_race_average
-    left blank until the corresponding race_results are added), so we only
-    check rounds where GridRival's own values exist to compare against.
+    left blank until the corresponding finishing positions are added), so we
+    only check rounds where GridRival's own values exist to compare against.
     """
     dd = driver_data()
     drivers = dd[dd["type"] == "driver"]
@@ -99,7 +98,11 @@ class TestAgreementWithGridRival:
         )
 
     def test_default_round_is_latest(self):
-        latest = race_results()["round"].max()
+        drivers = driver_data()
+        drivers = drivers[drivers["type"] == "driver"]
+        latest = int(
+            drivers.loc[drivers["finishing_position"].notna(), "round"].max()
+        )
         pd.testing.assert_series_equal(
             calculate_eight_race_averages(),
             calculate_eight_race_averages(through_round=latest),
@@ -107,25 +110,34 @@ class TestAgreementWithGridRival:
 
 
 # ---------------------------------------------------------------------------
-# race_results.csv data integrity
+# Recorded finishing-position data integrity (driver_data.csv)
 # ---------------------------------------------------------------------------
 
 
-class TestRaceResultsData:
-    def test_positions_complete_each_round(self):
-        rr = race_results()
-        for rnd, group in rr.groupby("round"):
-            positions = sorted(group["finishing_position"])
-            assert positions == list(range(1, len(group) + 1)), (
-                f"Round {rnd} positions are not a complete 1..n sequence"
-            )
+def _finishes_by_round():
+    """driver_data finishing positions, one frame per round that records them."""
+    drivers = driver_data()
+    drivers = drivers[(drivers["type"] == "driver") & drivers["finishing_position"].notna()]
+    return {rnd: group for rnd, group in drivers.groupby("round")}
+
+
+class TestFinishingPositionData:
+    @pytest.mark.parametrize("rnd", sorted(_finishes_by_round()))
+    def test_positions_complete_each_round(self, rnd):
+        group = _finishes_by_round()[rnd]
+        positions = sorted(group["finishing_position"].astype(int))
+        assert positions == list(range(1, len(group) + 1)), (
+            f"Round {rnd} finishing positions are not a complete 1..n sequence"
+        )
 
     def test_round_one_matches_australia_fixture(self):
         """Race 1 positions must agree with the Australia scenario fixture."""
         australia = pd.read_csv(_TESTS_DIR / "test_australia.csv").set_index(
             "driver_abbr"
         )
-        rr = race_results()
-        round_one = rr[rr["round"] == 1].set_index("driver_abbr")
+        drivers = driver_data()
+        round_one = drivers[
+            (drivers["type"] == "driver") & (drivers["round"] == 1)
+        ].set_index("driver_abbr")
         for abbr, expected in australia["finishing_position"].items():
             assert round_one.at[abbr, "finishing_position"] == expected
