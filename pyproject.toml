@@ -27,6 +27,7 @@ Homepage = "https://github.com/nce8/gr_analytics"
 
 [tool.setuptools.packages.find]
 where = ["."]
+include = ["gr_analytics*"]
 
 [tool.setuptools.package-data]
 gr_analytics = ["data/*.csv"]
