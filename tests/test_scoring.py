@@ -552,7 +552,9 @@ class TestOptimalLineupStarCap:
                 "salary_change": [2.0, 1.5, 1.0, 0.5, 0.0, 1.0],
             }
         )
-        result = optimal_lineup(pool, locked_in=["D3"])
+        # budget is the TOTAL budget; the forced lineup costs
+        # 15+25+22+21+20+12 = 115, so give it exactly that.
+        result = optimal_lineup(pool, locked_in=["D3"], budget=115.0)
         star_row = result[result["star"] == 1]
         assert star_row.iloc[0]["driver_abbr"] == "D3"
 
@@ -655,6 +657,99 @@ class TestLockedOut:
         result = optimal_lineup(df, locked_out=["BAD"], star_salary_cap=None)
         picked_teams = set(result.loc[result["type"] == "team", "driver_name"])
         assert "BAD" not in picked_teams
+
+
+# ---------------------------------------------------------------------------
+# budget vs locked_in interaction tests
+# ---------------------------------------------------------------------------
+
+
+class TestBudgetLockedIn:
+    """`budget` is the TOTAL budget; locked-in salaries are subtracted from it."""
+
+    @pytest.fixture
+    def lock_pool(self):
+        """
+        LOCK (salary=40) is locked in; a full lineup needs 4 more free
+        drivers + 1 constructor.
+
+        Free options:
+          EXPENSIVE: salary=45, points=999  (very attractive)
+          C1–C4:     salary=12, points=50   (cheap filler)
+          TEAM:      salary=12, points=50
+
+        Cheapest full free lineup: C1–C4 + TEAM = 4*12 + 12 = 60.
+        EXPENSIVE free lineup:     EXPENSIVE + 3*C + TEAM = 45 + 36 + 12 = 93.
+        """
+        return pd.DataFrame(
+            {
+                "type": [
+                    "driver",
+                    "driver",
+                    "driver",
+                    "driver",
+                    "driver",
+                    "driver",
+                    "team",
+                ],
+                "driver_abbr": ["LOCK", "EXPENSIVE", "C1", "C2", "C3", "C4", None],
+                "driver_name": ["LOCK", "EXPENSIVE", "C1", "C2", "C3", "C4", "TEAM"],
+                "starting_salary": [40.0, 45.0, 12.0, 12.0, 12.0, 12.0, 12.0],
+                "points_earned": [100.0, 999.0, 50.0, 50.0, 50.0, 50.0, 50.0],
+                "salary_change": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            }
+        )
+
+    def test_locked_salary_subtracted_blocks_expensive_pick(self, lock_pool):
+        """
+        budget=100 total with LOCK (salary=40) locked in leaves only £60.
+        The EXPENSIVE free lineup costs 93, so it must be dropped despite
+        EXPENSIVE having by far the most points.
+        """
+        result = optimal_lineup(
+            lock_pool,
+            locked_in=["LOCK"],
+            budget=100.0,
+            optimize_for="points",
+            star_salary_cap=None,
+        )
+        picked = set(result["driver_abbr"].dropna())
+        assert "LOCK" in picked
+        assert "EXPENSIVE" not in picked
+        # Whole-lineup salary (including the locked pick) respects the total.
+        assert result["starting_salary"].sum() <= 100.0 + 1e-9
+
+    def test_budget_covers_locked_plus_expensive(self, lock_pool):
+        """
+        budget=133 leaves exactly £93 after LOCK (40) — precisely the cost of
+        the EXPENSIVE free lineup — so EXPENSIVE becomes affordable and is
+        picked for its 999 points. Confirms the subtraction is exact.
+        """
+        result = optimal_lineup(
+            lock_pool,
+            locked_in=["LOCK"],
+            budget=133.0,
+            optimize_for="points",
+            star_salary_cap=None,
+        )
+        picked = set(result["driver_abbr"].dropna())
+        assert "EXPENSIVE" in picked
+        assert result["starting_salary"].sum() <= 133.0 + 1e-9
+
+    def test_one_pound_short_blocks_expensive(self, lock_pool):
+        """
+        budget=132.9 leaves £92.9 after LOCK — one notch below the 93 needed
+        for the EXPENSIVE lineup — so EXPENSIVE is dropped again.
+        """
+        result = optimal_lineup(
+            lock_pool,
+            locked_in=["LOCK"],
+            budget=132.9,
+            optimize_for="points",
+            star_salary_cap=None,
+        )
+        picked = set(result["driver_abbr"].dropna())
+        assert "EXPENSIVE" not in picked
 
 
 # ---------------------------------------------------------------------------

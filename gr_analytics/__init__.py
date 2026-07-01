@@ -27,11 +27,33 @@ import pandas as pd
 from scipy.optimize import Bounds, LinearConstraint, milp
 
 _DATA_DIR = Path(__file__).parent / "data"
+_DRIVER_DATA_PATH = _DATA_DIR / "driver_data.csv"
+
+# Read driver_data.csv once at import time so repeated driver_data() calls
+# don't re-read and re-parse the file from disk.
+try:
+    _DRIVER_DATA = pd.read_csv(_DRIVER_DATA_PATH)
+except FileNotFoundError as exc:
+    raise FileNotFoundError(
+        f"gr_analytics could not find its bundled driver data at "
+        f"{_DRIVER_DATA_PATH}. The packaged data file appears to be missing; "
+        f"reinstalling gr_analytics should restore it."
+    ) from exc
+except (pd.errors.EmptyDataError, pd.errors.ParserError) as exc:
+    raise RuntimeError(
+        f"gr_analytics could not parse its bundled driver data at "
+        f"{_DRIVER_DATA_PATH}: {exc}"
+    ) from exc
 
 
 def driver_data() -> pd.DataFrame:
-    """Load and return driver_data.csv as a DataFrame."""
-    return pd.read_csv(_DATA_DIR / "driver_data.csv")
+    """Return driver_data.csv as a DataFrame.
+
+    The CSV is read into memory once at module import; each call returns a
+    fresh copy so callers can safely mutate the result without corrupting
+    the shared in-memory copy.
+    """
+    return _DRIVER_DATA.copy()
 
 
 # ---------------------------------------------------------------------------
@@ -661,8 +683,9 @@ def optimal_lineup(
         The star driver (whose points component is doubled) is chosen
         optimally whenever balance > 0.
     budget : float
-        Salary budget in £M available for non-locked-in picks (default 100).
-        Locked-in drivers are treated as free (already under contract).
+        Total salary budget in £M (default 100). The current salary
+        (``starting_salary``) of every locked-in pick is subtracted from
+        this to determine the budget remaining for non-locked-in picks.
     star_salary_cap : float
         Maximum starting_salary allowed for the star driver (default 19.0).
         Drivers above this threshold are excluded from star consideration.
@@ -711,7 +734,7 @@ def optimal_lineup(
     drivers_needed = 5 - n_locked_drivers
     teams_needed = 1 - n_locked_teams
 
-    remaining_budget = budget
+    remaining_budget = budget - locked["starting_salary"].sum()
 
     # Restrict free pool to only the slot types still needed
     if teams_needed == 0:

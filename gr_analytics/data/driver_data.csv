@@ -263,3 +263,36 @@ team,AUD,AUD,,7,12.9,,99,
 team,HAS,HAS,,7,12.1,,106,
 team,AMR,AMR,,7,7.6,,74,
 team,CAD,CAD,,7,6.4,,78,
+driver,HAM,L. Hamilton,FER,8,28.5,,165,5
+driver,ANT,K. Antonelli,MER,8,28.2,,167,3
+driver,RUS,G. Russell,MER,8,28,,156,1
+driver,VER,M. Verstappen,RBR,8,27.4,,146,2
+driver,PIA,O. Piastri,MCL,8,27,,136,4
+driver,NOR,L. Norris,MCL,8,24.3,,133,7
+driver,LEC,C. Leclerc,FER,8,22.5,,145,8
+driver,HAD,I. Hadjar,RBR,8,22.4,,131,6
+driver,LAW,L. Lawson,RBS,8,20.5,,137,9
+driver,GAS,P. Gasly,ALP,8,19.3,,132,13
+driver,BOR,G. Bortoleto,AUD,8,15.6,,113,11
+driver,LIN,A. Lindblad,RBS,8,14.2,,123,10
+driver,SAI,C. Sainz Jr,WIL,8,14.1,,114,20
+driver,COL,F. Colapinto,ALP,8,13.5,,130,15
+driver,OCO,E. Ocon,HAS,8,13.1,,121,16
+driver,HUL,N. Hulkenberg,AUD,8,12.5,,98,12
+driver,BEA,O. Bearman,HAS,8,11.9,,118,14
+driver,ALO,F. Alonso,AMR,8,11.3,,87,18
+driver,ALB,A. Albon,WIL,8,9.9,,90,17
+driver,PER,S. Perez,CAD,8,7.4,,94,21
+driver,STR,L. Stroll,AMR,8,6.1,,74,19
+driver,BOT,V. Bottas,CAD,8,3.2,,75,22
+team,MER,MER,,8,28.3,,164,
+team,FER,FER,,8,25.1,,154,
+team,RBR,RBR,,8,24.2,,130,
+team,MCL,MCL,,8,23.9,,129,
+team,RBS,RBS,,8,17.8,,117,
+team,ALP,ALP,,8,17.3,,119,
+team,AUD,AUD,,8,13.9,,100,
+team,HAS,HAS,,8,12.1,,105,
+team,WIL,WIL,,8,12.1,,92,
+team,AMR,AMR,,8,7.4,,73,
+team,CAD,CAD,,8,5.8,,76,
